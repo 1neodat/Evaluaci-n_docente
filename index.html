@@ -2,86 +2,98 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>UIDE - Generador Final</title>
+    <title>Generador UIDE - Versión Robusta</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 50px; }
-        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 450px; }
-        h2 { color: #003366; border-bottom: 2px solid #003366; padding-bottom: 10px; }
-        .step { margin: 20px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; font-size: 14px; border-radius: 5px; }
-        button { background: #d4af37; color: #001a33; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #b8962d; }
+        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 40px; }
+        .card { background: white; color: #333; padding: 30px; border-radius: 12px; width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { color: #003366; text-align: center; margin-top: 0; }
+        .input-box { border: 2px dashed #003366; padding: 15px; border-radius: 8px; margin-bottom: 20px; background: #f8f9fa; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+        button { background: #b8962d; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #9a7d25; }
+        label { font-weight: bold; font-size: 13px; color: #555; }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="card">
     <h2>Generador UIDE</h2>
-    <div class="step">
-        <label>1. Cargar Excel:</label><input type="file" id="e" accept=".xlsx" style="width:100%">
+    
+    <div class="input-box">
+        <label>1. Archivo Excel:</label>
+        <input type="file" id="excelIn" accept=".xlsx" style="width:100%; margin-top:5px;">
     </div>
-    <div class="step">
-        <label>2. Cargar Word (Plantilla):</label><input type="file" id="w" accept=".docx" style="width:100%">
+
+    <div class="input-box">
+        <label>2. Plantilla Word:</label>
+        <input type="file" id="wordIn" accept=".docx" style="width:100%; margin-top:5px;">
     </div>
-    <div id="ready" style="display:none">
-        <label>Carrera:</label><select id="selC" onchange="updateD()"></select>
-        <label>Docente:</label><select id="selD"></select>
-        <button onclick="save()">GENERAR DOCUMENTO LLENO</button>
+
+    <div id="controls" style="display:none">
+        <label>Carrera:</label>
+        <select id="selC" onchange="filterD()"></select>
+        
+        <label>Docente:</label>
+        <select id="selD"></select>
+        
+        <button onclick="process()">GENERAR INFORME LLENO</button>
     </div>
 </div>
 
 <script>
-let rows = [];
-let zipContent = null;
+let excelData = [];
+let wordBuffer = null;
 
-document.getElementById('e').onchange = function(evt) {
-    const r = new FileReader();
-    r.onload = (e) => {
-        const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+document.getElementById('excelIn').onchange = function(e) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
         const ws = wb.Sheets["BD"] || wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(ws);
-        const cats = [...new Set(rows.map(r => r.Escuela).filter(Boolean))].sort();
+        excelData = XLSX.utils.sheet_to_json(ws);
+        
+        const cats = [...new Set(excelData.map(r => r.Escuela).filter(Boolean))].sort();
         document.getElementById('selC').innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
-        updateD();
-        check();
+        filterD();
+        checkReady();
     };
-    r.readAsArrayBuffer(evt.target.files[0]);
+    reader.readAsArrayBuffer(e.target.files[0]);
 };
 
-document.getElementById('w').onchange = function(evt) {
-    const r = new FileReader();
-    r.onload = (e) => { zipContent = e.target.result; check(); };
-    r.readAsArrayBuffer(evt.target.files[0]);
+document.getElementById('wordIn').onchange = function(e) {
+    const reader = new FileReader();
+    reader.onload = (ev) => { wordBuffer = ev.target.result; checkReady(); };
+    reader.readAsArrayBuffer(e.target.files[0]);
 };
 
-function check() { if(rows.length && zipContent) document.getElementById('ready').style.display='block'; }
+function checkReady() { if(excelData.length && wordBuffer) document.getElementById('controls').style.display = 'block'; }
 
-function updateD() {
+function filterD() {
     const c = document.getElementById('selC').value;
-    const docs = rows.filter(r => r.Escuela === c).map(r => r.Docente).sort();
+    const docs = excelData.filter(r => r.Escuela === c).map(r => r.Docente).sort();
     document.getElementById('selD').innerHTML = docs.map(d => `<option value="${d}">${d}</option>`).join('');
 }
 
-function save() {
+function process() {
     const name = document.getElementById('selD').value;
-    const data = rows.find(r => r.Docente === name);
-    const score = (parseFloat(data.Promedio) * 20).toFixed(2);
+    const row = excelData.find(r => r.Docente === name);
+    const score = (parseFloat(row.Promedio) * 20).toFixed(2);
 
     try {
-        const zip = new PizZip(zipContent);
-        // El parser "delimiters" fuerza al programa a buscar las llaves incluso si hay basura oculta
+        const zip = new PizZip(wordBuffer);
         const doc = new window.docxtemplater(zip, { 
             paragraphLoop: true, 
-            linebreaks: true
+            linebreaks: true,
+            // ESTO LIMPIA LAS ETIQUETAS CORRUPTAS DE WORD
+            delimiters: {start: '{{', end: '}}'} 
         });
 
         doc.setData({
-            docente: data.Docente,
-            carrera: data.Escuela,
+            docente: row.Docente,
+            carrera: row.Escuela,
             ev100: score,
             total100: score,
             escala: score >= 85 ? "Excelente" : (score >= 70 ? "Muy buena" : "Regular")
@@ -89,9 +101,10 @@ function save() {
 
         doc.render();
         const out = doc.getZip().generate({type: "blob"});
-        saveAs(out, `Resultado_${name}.docx`);
+        saveAs(out, `Informe_${name.replace(/ /g, '_')}.docx`);
     } catch (e) {
-        alert("Error: Revisa que tu Word tenga las etiquetas {{docente}} y {{ev100}} correctamente escritas.");
+        console.error(e);
+        alert("Error al llenar: Asegúrate de que las etiquetas en Word sean {{docente}}, {{carrera}}, {{ev100}} y {{total100}}.");
     }
 }
 </script>
