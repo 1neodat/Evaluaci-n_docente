@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generador Automático UIDE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
+    <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body { font-family: 'Arial', sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 50px; }
+        .box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 400px; }
+        select, button { width: 100%; padding: 10px; margin-top: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #003366; color: white; border: none; cursor: pointer; font-weight: bold; }
+        label { font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2 style="color:#003366; text-align:center">Generar Informe</h2>
+    
+    <label>Seleccione Carrera:</label>
+    <select id="carrera" onchange="actualizarListaDocentes()">
+        <option value="">-- Seleccione Carrera --</option>
+        </select>
+
+    <label>Seleccione Docente:</label>
+    <select id="docente">
+        <option value="">-- Seleccione Docente --</option>
+    </select>
+
+    <button onclick="generarInforme()">Llenar Plantilla y Descargar</button>
+</div>
+
+<script>
+// ESTA ES LA DATA QUE VIENE DE TUS EXCEL (Se puede cargar desde un archivo externo)
+const dataUIDE = [
+    {
+        docente: "JARAMILLO CARRION ENMA DEL CISNE",
+        carrera: "Marketing - Loja",
+        ev100: "77.20", gpr100: "100", inv100: "0", vin100: "0", ges100: "100", bi100: "100", total100: "77.20", escala: "Muy buena"
+    },
+    {
+        docente: "JARAMILLO CARRION ENMA DEL CISNE",
+        carrera: "Negocios Internacionales - Loja",
+        ev100: "74.50", gpr100: "100", inv100: "0", vin100: "0", ges100: "100", bi100: "100", total100: "74.50", escala: "Muy buena"
+    }
+    // Aquí se irán agregando todos los docentes del Excel automáticamente
+];
+
+// Llenar carreras dinámicamente
+const selCarrera = document.getElementById("carrera");
+const carrerasUnicas = [...new Set(dataUIDE.map(d => d.carrera))];
+carrerasUnicas.forEach(c => {
+    let opt = document.createElement("option");
+    opt.value = c; opt.text = c;
+    selCarrera.add(opt);
+});
+
+function actualizarListaDocentes() {
+    const cVal = selCarrera.value;
+    const selDoc = document.getElementById("docente");
+    selDoc.innerHTML = '<option value="">-- Seleccione Docente --</option>';
+    dataUIDE.filter(d => d.carrera === cVal).forEach(d => {
+        let opt = document.createElement("option");
+        opt.value = d.docente; opt.text = d.docente;
+        selDoc.add(opt);
+    });
+}
+
+async function generarInforme() {
+    const dVal = document.getElementById("docente").value;
+    const cVal = document.getElementById("carrera").value;
+    const selectedData = dataUIDE.find(d => d.docente === dVal && d.carrera === cVal);
+
+    if (!selectedData) return alert("Seleccione datos válidos");
+
+    // CARGAR LA PLANTILLA DESDE EL REPOSITORIO
+    const response = await fetch("GA-EMA-IN-25102025.docx");
+    const content = await response.arrayBuffer();
+    const zip = new PizZip(content);
+    const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+    // REEMPLAZAR LAS ETIQUETAS {{ }} POR LOS DATOS SELECCIONADOS
+    doc.render(selectedData);
+
+    const out = doc.getZip().generate({
+        type: "blob",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    saveAs(out, `Informe_${dVal}.docx`);
+}
+</script>
+</body>
+</html>
