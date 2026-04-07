@@ -2,122 +2,124 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generador de Informes UIDE</title>
+    <title>Generador UIDE - Enlace Directo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 40px; }
-        .card { background: white; color: #333; padding: 30px; border-radius: 12px; width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
-        h2 { color: #003366; text-align: center; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid #ddd; }
-        button { background: #003366; color: white; border: none; cursor: pointer; font-weight: bold; font-size: 16px; }
-        .status { font-size: 12px; text-align: center; margin-top: 15px; padding: 10px; border-radius: 4px; }
-        .error { background: #f8d7da; color: #721c24; }
-        .success { background: #d4edda; color: #155724; }
+        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 30px; }
+        .container { background: white; color: #333; padding: 25px; border-radius: 15px; width: 480px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        h2 { color: #003366; text-align: center; margin-bottom: 5px; }
+        .box { background: #f8f9fa; border: 2px dashed #003366; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; font-size: 14px; }
+        button { background: #003366; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        label { font-weight: bold; font-size: 13px; color: #555; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>Generador UIDE</h2>
-    <div id="status" class="status">Cargando base de datos...</div>
-    
-    <label>1. Seleccione Carrera:</label>
-    <select id="selCarrera" onchange="cargarDocentes()">
-        <option value="">Esperando datos...</option>
-    </select>
+<div class="container">
+    <h2>Generador de Informes</h2>
+    <p style="text-align:center; font-size: 12px; color: #666;">Enlace directo Excel a Word</p>
 
-    <label>2. Seleccione Docente:</label>
-    <select id="selDocente">
-        <option value="">Seleccione carrera primero</option>
-    </select>
+    <div class="box">
+        <label>1. Cargar Excel (Evaluación):</label>
+        <input type="file" id="inputExcel" accept=".xlsx" style="margin-top:10px; width:100%;">
+    </div>
 
-    <button onclick="generarInforme()">GENERAR Y DESCARGAR WORD</button>
+    <div class="box">
+        <label>2. Cargar Plantilla Word:</label>
+        <input type="file" id="inputWord" accept=".docx" style="margin-top:10px; width:100%;">
+    </div>
+
+    <div id="controles" style="display:none;">
+        <label>Carrera / Escuela:</label>
+        <select id="selCarrera" onchange="actualizarDocentes()"></select>
+
+        <label>Docente:</label>
+        <select id="selDocente"></select>
+
+        <button id="btnProcesar" onclick="generarDocumento()">GENERAR Y LLENAR WORD</button>
+    </div>
 </div>
 
 <script>
-let rawData = [];
+let excelData = [];
+let wordBuffer = null;
 
-// Función para leer el Excel desde GitHub
-async function inicializar() {
-    const status = document.getElementById("status");
-    try {
-        const response = await fetch("Evaluación docente individual.xlsx");
-        if (!response.ok) throw new Error("No se encontró el archivo Excel en el repositorio.");
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-        
-        // Buscamos la hoja "BD" que es la que tiene los datos limpios
+// LECTURA DE EXCEL
+document.getElementById('inputExcel').addEventListener('change', function(e) {
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
         const sheet = workbook.Sheets["BD"] || workbook.Sheets[workbook.SheetNames[0]];
-        rawData = XLSX.utils.sheet_to_json(sheet);
-
-        // Llenar select de carreras
-        const carreras = [...new Set(rawData.map(d => d.Escuela).filter(Boolean))].sort();
+        excelData = XLSX.utils.sheet_to_json(sheet);
+        
+        const carreras = [...new Set(excelData.map(d => d.Escuela).filter(Boolean))].sort();
         const selC = document.getElementById("selCarrera");
         selC.innerHTML = '<option value="">-- Seleccione Carrera --</option>';
         carreras.forEach(c => selC.innerHTML += `<option value="${c}">${c}</option>`);
+        
+        mostrarControles();
+    };
+    reader.readAsArrayBuffer(e.target.files[0]);
+});
 
-        status.innerText = "✅ Base de datos lista";
-        status.className = "status success";
-    } catch (e) {
-        status.innerText = "❌ Error: " + e.message;
-        status.className = "status error";
+// LECTURA DE WORD
+document.getElementById('inputWord').addEventListener('change', function(e) {
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        wordBuffer = evt.target.result;
+        mostrarControles();
+    };
+    reader.readAsArrayBuffer(e.target.files[0]);
+});
+
+function mostrarControles() {
+    if (excelData.length > 0 && wordBuffer) {
+        document.getElementById("controles").style.display = "block";
     }
 }
 
-function cargarDocentes() {
+function actualizarDocentes() {
     const carrera = document.getElementById("selCarrera").value;
     const selD = document.getElementById("selDocente");
-    selD.innerHTML = '<option value="">-- Seleccione Docente --</option>';
-    
-    const docentes = [...new Set(rawData.filter(d => d.Escuela === carrera).map(d => d.Docente))].sort();
-    docentes.forEach(d => selD.innerHTML += `<option value="${d}">${d}</option>`);
+    selD.innerHTML = "";
+    const filtrados = [...new Set(excelData.filter(d => d.Escuela === carrera).map(d => d.Docente))].sort();
+    filtrados.forEach(d => selD.innerHTML += `<option value="${d}">${d}</option>`);
 }
 
-async function generarInforme() {
+async function generarDocumento() {
     const docenteNombre = document.getElementById("selDocente").value;
-    const carreraNombre = document.getElementById("selCarrera").value;
-    const data = rawData.find(d => d.Docente === docenteNombre && d.Escuela === carreraNombre);
+    const fila = excelData.find(d => d.Docente === docenteNombre);
 
-    if (!data) return alert("Seleccione Docente y Carrera");
+    if (!fila) return alert("Error al encontrar datos del docente.");
 
     try {
-        // Cargar Plantilla Word
-        const resp = await fetch("GA-EMA-IN-25102025 INFORME EVALUACION DOCENTE .docx");
-        const arrayBuffer = await resp.arrayBuffer();
-        const zip = new PizZip(arrayBuffer);
+        const zip = new PizZip(wordBuffer);
         const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-        // Convertir promedio (base 5) a base 100
-        const notaFinal = (parseFloat(data.Promedio) * 20).toFixed(2);
+        // Cálculo: Promedio (1-5) a base 100
+        const puntaje = (parseFloat(fila.Promedio) * 20).toFixed(2);
 
-        // Reemplazar etiquetas en el Word
+        // ENLACE DE DATOS
         doc.render({
-            docente: data.Docente,
-            carrera: data.Escuela,
-            ev100: notaFinal,
-            gpr100: "100.00",
-            inv100: "0.00",
-            vin100: "0.00",
-            ges100: "100.00",
-            bi100: "100.00",
-            total100: notaFinal,
-            escala: notaFinal >= 70 ? "Muy buena" : "Regular"
+            docente: fila.Docente,
+            carrera: fila.Escuela,
+            ev100: puntaje,
+            total100: puntaje,
+            escala: puntaje >= 85 ? "Excelente" : (puntaje >= 70 ? "Muy buena" : "Regular")
         });
 
-        const out = doc.getZip().generate({ type: "blob" });
-        saveAs(out, `Informe_${docenteNombre}.docx`);
-
+        const out = doc.getZip().generate({type: "blob"});
+        saveAs(out, `Informe_${docenteNombre.replace(/ /g, "_")}.docx`);
     } catch (err) {
-        alert("Error al procesar el Word: " + err.message);
+        alert("Error: " + err.message);
     }
 }
-
-window.onload = inicializar;
 </script>
-
 </body>
 </html>
