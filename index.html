@@ -2,111 +2,558 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generador UIDE - Versión Robusta</title>
+    <title>Generador Informe Docente UIDE - Carga Automática</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 40px; }
-        .card { background: white; color: #333; padding: 30px; border-radius: 12px; width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { color: #003366; text-align: center; margin-top: 0; }
-        .input-box { border: 2px dashed #003366; padding: 15px; border-radius: 8px; margin-bottom: 20px; background: #f8f9fa; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
-        button { background: #b8962d; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #9a7d25; }
-        label { font-weight: bold; font-size: 13px; color: #555; }
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .card {
+            background: white;
+            max-width: 800px;
+            width: 100%;
+            border-radius: 28px;
+            box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #003366;
+            padding: 24px 28px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: white;
+        }
+
+        .header p {
+            margin: 8px 0 0;
+            color: #cce4ff;
+            font-size: 0.85rem;
+        }
+
+        .content {
+            padding: 28px 30px 32px;
+        }
+
+        .input-group {
+            background: #f8fafd;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 18px 20px;
+            margin-bottom: 24px;
+        }
+
+        .input-group label {
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: #1e4663;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px 0;
+            font-size: 0.9rem;
+            background: transparent;
+        }
+
+        input[type="file"]::file-selector-button {
+            background: #e9edf2;
+            border: 1px solid #cbd5e1;
+            border-radius: 40px;
+            padding: 6px 16px;
+            cursor: pointer;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 40px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.9rem;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+
+        button {
+            background: #b8962d;
+            color: white;
+            font-weight: bold;
+            border: none;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #9a7d25;
+            transform: scale(0.98);
+        }
+
+        .preview-table {
+            margin-top: 20px;
+            overflow-x: auto;
+            font-size: 0.75rem;
+            background: #f9f9ff;
+            border-radius: 16px;
+            padding: 10px;
+        }
+
+        .preview-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .preview-table th, .preview-table td {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            text-align: center;
+        }
+
+        .preview-table th {
+            background: #e6edf6;
+        }
+
+        .status-badge {
+            background: #eef2ff;
+            border-radius: 40px;
+            padding: 12px 18px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #1f4a7c;
+            margin-top: 20px;
+        }
+
+        .footer-note {
+            font-size: 0.7rem;
+            text-align: center;
+            color: #6c7a8e;
+            border-top: 1px solid #e2edf7;
+            padding-top: 18px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
-
 <div class="card">
-    <h2>Generador UIDE</h2>
-    
-    <div class="input-box">
-        <label>1. Archivo Excel:</label>
-        <input type="file" id="excelIn" accept=".xlsx" style="width:100%; margin-top:5px;">
+    <div class="header">
+        <h1>📊 Generador UIDE</h1>
+        <p>Carga datos desde Excel → Llena informe automáticamente</p>
     </div>
+    <div class="content">
+        <div class="input-group">
+            <label>📎 1. ARCHIVO EXCEL (DATOS POR CURSO)</label>
+            <input type="file" id="excelInput" accept=".xlsx, .xls">
+            <div style="font-size:12px; margin-top:8px; color:#4b6a8b;">
+                El Excel debe contener columnas: <strong>Curso, P1, P2, P3, P4, P5, P6, P7, P8, Promedio</strong><br>
+                (similar a la imagen de evaluación por parámetros)
+            </div>
+        </div>
 
-    <div class="input-box">
-        <label>2. Plantilla Word:</label>
-        <input type="file" id="wordIn" accept=".docx" style="width:100%; margin-top:5px;">
-    </div>
+        <div class="input-group">
+            <label>📄 2. PLANTILLA WORD (INFORME DOCENTE)</label>
+            <input type="file" id="wordInput" accept=".docx">
+            <div style="font-size:12px; margin-top:8px;">La plantilla debe tener etiquetas como {{docente}}, {{carrera}}, y tablas con #asignaturas</div>
+        </div>
 
-    <div id="controls" style="display:none">
-        <label>Carrera:</label>
-        <select id="selC" onchange="filterD()"></select>
-        
-        <label>Docente:</label>
-        <select id="selD"></select>
-        
-        <button onclick="process()">GENERAR INFORME LLENO</button>
+        <div id="dynamicPanel" style="display: none;">
+            <div class="input-group">
+                <label>🏛️ CARRERA / ESCUELA</label>
+                <select id="carreraSelect"></select>
+            </div>
+            <div class="input-group">
+                <label>👩‍🏫 DOCENTE</label>
+                <select id="docenteSelect"></select>
+            </div>
+            <div class="input-group">
+                <label>📘 CURSO / ASIGNATURA A EVALUAR</label>
+                <select id="cursoSelect"></select>
+            </div>
+            <button id="generateBtn">✨ GENERAR INFORME LLENO</button>
+        </div>
+
+        <div id="infoMessage" class="status-badge">
+            ⚡ Esperando archivos...
+        </div>
+
+        <div id="previewArea" style="display:none;" class="preview-table">
+            <strong>Vista previa de datos del curso seleccionado:</strong>
+            <div id="tablePreview"></div>
+        </div>
+
+        <div class="footer-note">
+            ✅ Los datos de P1 a P8 se tomarán del Excel y llenarán la tabla de asignaturas en el Word.
+        </div>
     </div>
 </div>
 
 <script>
-let excelData = [];
-let wordBuffer = null;
+    // Variables globales
+    let excelData = [];               // datos del Excel (cursos/parámetros)
+    let plantillaBuffer = null;      // buffer de la plantilla Word
+    let excelLoaded = false;
+    let wordLoaded = false;
 
-document.getElementById('excelIn').onchange = function(e) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
-        const ws = wb.Sheets["BD"] || wb.Sheets[wb.SheetNames[0]];
-        excelData = XLSX.utils.sheet_to_json(ws);
-        
-        const cats = [...new Set(excelData.map(r => r.Escuela).filter(Boolean))].sort();
-        document.getElementById('selC').innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
-        filterD();
-        checkReady();
-    };
-    reader.readAsArrayBuffer(e.target.files[0]);
-};
+    let docentesUnicos = [];
+    let carrerasUnicas = [];
+    let cursosPorDocente = {};
 
-document.getElementById('wordIn').onchange = function(e) {
-    const reader = new FileReader();
-    reader.onload = (ev) => { wordBuffer = ev.target.result; checkReady(); };
-    reader.readAsArrayBuffer(e.target.files[0]);
-};
+    // Elementos DOM
+    const excelInput = document.getElementById('excelInput');
+    const wordInput = document.getElementById('wordInput');
+    const dynamicPanel = document.getElementById('dynamicPanel');
+    const infoDiv = document.getElementById('infoMessage');
+    const carreraSelect = document.getElementById('carreraSelect');
+    const docenteSelect = document.getElementById('docenteSelect');
+    const cursoSelect = document.getElementById('cursoSelect');
+    const generateBtn = document.getElementById('generateBtn');
+    const previewArea = document.getElementById('previewArea');
+    const tablePreview = document.getElementById('tablePreview');
 
-function checkReady() { if(excelData.length && wordBuffer) document.getElementById('controls').style.display = 'block'; }
-
-function filterD() {
-    const c = document.getElementById('selC').value;
-    const docs = excelData.filter(r => r.Escuela === c).map(r => r.Docente).sort();
-    document.getElementById('selD').innerHTML = docs.map(d => `<option value="${d}">${d}</option>`).join('');
-}
-
-function process() {
-    const name = document.getElementById('selD').value;
-    const row = excelData.find(r => r.Docente === name);
-    const score = (parseFloat(row.Promedio) * 20).toFixed(2);
-
-    try {
-        const zip = new PizZip(wordBuffer);
-        const doc = new window.docxtemplater(zip, { 
-            paragraphLoop: true, 
-            linebreaks: true,
-            // ESTO LIMPIA LAS ETIQUETAS CORRUPTAS DE WORD
-            delimiters: {start: '{{', end: '}}'} 
-        });
-
-        doc.setData({
-            docente: row.Docente,
-            carrera: row.Escuela,
-            ev100: score,
-            total100: score,
-            escala: score >= 85 ? "Excelente" : (score >= 70 ? "Muy buena" : "Regular")
-        });
-
-        doc.render();
-        const out = doc.getZip().generate({type: "blob"});
-        saveAs(out, `Informe_${name.replace(/ /g, '_')}.docx`);
-    } catch (e) {
-        console.error(e);
-        alert("Error al llenar: Asegúrate de que las etiquetas en Word sean {{docente}}, {{carrera}}, {{ev100}} y {{total100}}.");
+    // ------------------------------------------------
+    // 1. PROCESAR EXCEL (estructura similar a la imagen)
+    excelInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        infoDiv.innerHTML = '📂 Cargando Excel...';
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            try {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet);
+                
+                if (!rows || rows.length === 0) throw new Error("El Excel no contiene datos.");
+                
+                // Normalizar: se esperan columnas: Curso, P1, P2, P3, P4, P5, P6, P7, P8, Promedio (opcional)
+                // También puede incluir Docente y Escuela/Carrera
+                const requiredCols = ['Curso', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
+                const firstRow = rows[0];
+                const missing = requiredCols.filter(col => !firstRow.hasOwnProperty(col));
+                if (missing.length > 0) {
+                    infoDiv.innerHTML = `⚠️ El Excel debe tener las columnas: ${requiredCols.join(', ')}. Faltan: ${missing.join(', ')}`;
+                    excelLoaded = false;
+                    dynamicPanel.style.display = 'none';
+                    return;
+                }
+                
+                // Convertir valores numéricos (reemplazar comas por puntos)
+                excelData = rows.map(row => {
+                    const newRow = { ...row };
+                    for (let i = 1; i <= 8; i++) {
+                        const pKey = `P${i}`;
+                        let val = row[pKey];
+                        if (typeof val === 'string') val = val.replace(',', '.');
+                        newRow[pKey] = parseFloat(val) || 0;
+                    }
+                    // Promedio si existe, sino se calcula
+                    if (row.Promedio !== undefined) {
+                        let prom = row.Promedio;
+                        if (typeof prom === 'string') prom = prom.replace(',', '.');
+                        newRow.Promedio = parseFloat(prom) || 0;
+                    } else {
+                        // calcular promedio simple de P1 a P8
+                        let sum = 0;
+                        for (let i = 1; i <= 8; i++) sum += newRow[`P${i}`];
+                        newRow.Promedio = parseFloat((sum / 8).toFixed(2));
+                    }
+                    return newRow;
+                });
+                
+                // Extraer metadatos: Docente, Escuela/Carrera desde columnas opcionales
+                // Si existen columnas "Docente" y "Escuela" se usan, sino se crean por defecto
+                if (!excelData[0].hasOwnProperty('Docente')) {
+                    excelData.forEach((row, idx) => row.Docente = `Docente ${idx+1}`);
+                }
+                if (!excelData[0].hasOwnProperty('Escuela')) {
+                    excelData.forEach(row => row.Escuela = 'Business School UIDE-Loja');
+                }
+                
+                // Construir listas únicas para filtros
+                carrerasUnicas = [...new Set(excelData.map(r => r.Escuela).filter(Boolean))];
+                docentesUnicos = [...new Set(excelData.map(r => r.Docente).filter(Boolean))];
+                
+                // Mapear cursos por docente y carrera
+                cursosPorDocente = {};
+                excelData.forEach(row => {
+                    const key = `${row.Escuela}|${row.Docente}`;
+                    if (!cursosPorDocente[key]) cursosPorDocente[key] = [];
+                    cursosPorDocente[key].push({ curso: row.Curso, data: row });
+                });
+                
+                excelLoaded = true;
+                actualizarSelectoresCarrera();
+                verificarPaneles();
+                infoDiv.innerHTML = `✅ Excel cargado: ${excelData.length} cursos. Seleccione carrera, docente y curso.`;
+            } catch (err) {
+                console.error(err);
+                infoDiv.innerHTML = `❌ Error: ${err.message}`;
+                excelLoaded = false;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+    
+    // ------------------------------------------------
+    // 2. CARGAR PLANTILLA WORD
+    wordInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        infoDiv.innerHTML = '📄 Cargando plantilla Word...';
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            plantillaBuffer = evt.target.result;
+            wordLoaded = true;
+            verificarPaneles();
+            infoDiv.innerHTML = excelLoaded ? 
+                `✅ Plantilla Word lista. Seleccione datos y genere.` : 
+                `✅ Word cargado. Espere el Excel.`;
+        };
+        reader.onerror = () => {
+            infoDiv.innerHTML = '❌ Error al leer la plantilla Word.';
+            wordLoaded = false;
+        };
+        reader.readAsArrayBuffer(file);
+    });
+    
+    // ------------------------------------------------
+    function verificarPaneles() {
+        if (excelLoaded && wordLoaded) {
+            dynamicPanel.style.display = 'block';
+        } else {
+            dynamicPanel.style.display = 'none';
+        }
     }
-}
+    
+    function actualizarSelectoresCarrera() {
+        if (!excelData.length) return;
+        carreraSelect.innerHTML = '<option value="">-- Seleccionar carrera --</option>' + 
+            carrerasUnicas.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        carreraSelect.value = '';
+        docenteSelect.innerHTML = '<option>Primero seleccione carrera</option>';
+        cursoSelect.innerHTML = '<option>--</option>';
+    }
+    
+    function filtrarDocentesPorCarrera() {
+        const carrera = carreraSelect.value;
+        if (!carrera) {
+            docenteSelect.innerHTML = '<option>-- Seleccione carrera --</option>';
+            cursoSelect.innerHTML = '<option>--</option>';
+            return;
+        }
+        const docentesFiltrados = [...new Set(excelData.filter(r => r.Escuela === carrera).map(r => r.Docente))];
+        docenteSelect.innerHTML = '<option value="">-- Seleccionar docente --</option>' +
+            docentesFiltrados.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+        cursoSelect.innerHTML = '<option>-- Primero elija docente --</option>';
+    }
+    
+    function filtrarCursosPorDocente() {
+        const carrera = carreraSelect.value;
+        const docente = docenteSelect.value;
+        if (!carrera || !docente) {
+            cursoSelect.innerHTML = '<option>--</option>';
+            previewArea.style.display = 'none';
+            return;
+        }
+        const key = `${carrera}|${docente}`;
+        const cursos = cursosPorDocente[key] || [];
+        if (cursos.length === 0) {
+            cursoSelect.innerHTML = '<option>No hay cursos</option>';
+            previewArea.style.display = 'none';
+            return;
+        }
+        cursoSelect.innerHTML = '<option value="">-- Seleccionar curso --</option>' +
+            cursos.map(c => `<option value="${escapeHtml(c.curso)}">${escapeHtml(c.curso)}</option>`).join('');
+        
+        // Mostrar preview cuando se seleccione curso
+        cursoSelect.onchange = function() {
+            const cursoNombre = cursoSelect.value;
+            if (!cursoNombre) {
+                previewArea.style.display = 'none';
+                return;
+            }
+            const cursoData = cursos.find(c => c.curso === cursoNombre)?.data;
+            if (cursoData) mostrarPreview(cursoData);
+        };
+    }
+    
+    function mostrarPreview(data) {
+        previewArea.style.display = 'block';
+        let html = '<table><thead><tr><th>Parámetro</th><th>Valor</th></tr></thead><tbody>';
+        for (let i=1; i<=8; i++) {
+            html += `<tr><td><strong>P${i}</strong></td><td>${data[`P${i}`].toFixed(2)}</td></tr>`;
+        }
+        html += `<tr style="background:#eef2ff;"><td><strong>Promedio /5</strong></td><td><strong>${data.Promedio.toFixed(2)}</strong></td></tr>`;
+        html += `</tbody></table>`;
+        tablePreview.innerHTML = html;
+    }
+    
+    // ------------------------------------------------
+    // GENERAR INFORME: mapear los 8 parámetros del curso seleccionado a la tabla de asignaturas
+    async function generarInforme() {
+        if (!excelLoaded || !plantillaBuffer) {
+            alert("Debe cargar el Excel y la plantilla Word.");
+            return;
+        }
+        const carrera = carreraSelect.value;
+        const docente = docenteSelect.value;
+        const cursoNombre = cursoSelect.value;
+        if (!carrera || !docente || !cursoNombre) {
+            alert("Seleccione carrera, docente y curso.");
+            return;
+        }
+        
+        const key = `${carrera}|${docente}`;
+        const cursos = cursosPorDocente[key] || [];
+        const cursoDataObj = cursos.find(c => c.curso === cursoNombre)?.data;
+        if (!cursoDataObj) {
+            alert("No se encontraron datos para el curso seleccionado.");
+            return;
+        }
+        
+        // Obtener los valores P1..P8
+        const pValues = [];
+        for (let i=1; i<=8; i++) {
+            pValues.push(cursoDataObj[`P${i}`] || 0);
+        }
+        const promedioCurso = cursoDataObj.Promedio || (pValues.reduce((a,b)=>a+b,0)/8);
+        const promedioSobre100 = (promedioCurso * 20).toFixed(2);
+        
+        // Construir objeto para llenar la tabla de asignaturas en Word
+        // La plantilla debe tener una tabla con sintaxis {{#asignaturas}} ... {{/asignaturas}}
+        // y dentro celdas: {{nombre}}, {{p1}}, {{p2}}, ..., {{p8}}, {{promedio}}
+        const asignaturaPrincipal = {
+            nombre: cursoNombre,
+            p1: pValues[0].toFixed(2),
+            p2: pValues[1].toFixed(2),
+            p3: pValues[2].toFixed(2),
+            p4: pValues[3].toFixed(2),
+            p5: pValues[4].toFixed(2),
+            p6: pValues[5].toFixed(2),
+            p7: pValues[6].toFixed(2),
+            p8: pValues[7].toFixed(2),
+            promedio: promedioCurso.toFixed(2)
+        };
+        
+        // Si el Excel tiene más de un curso para el mismo docente, podríamos incluirlos todos
+        // pero según la imagen de destino son 4 asignaturas. Tomamos hasta 4 cursos del mismo docente (opcional)
+        const otrosCursos = cursos.filter(c => c.curso !== cursoNombre).slice(0,3);
+        const listaAsignaturas = [asignaturaPrincipal];
+        for (let oc of otrosCursos) {
+            const d = oc.data;
+            const vals = [];
+            for (let i=1;i<=8;i++) vals.push(d[`P${i}`] || 0);
+            listaAsignaturas.push({
+                nombre: oc.curso,
+                p1: vals[0].toFixed(2),
+                p2: vals[1].toFixed(2),
+                p3: vals[2].toFixed(2),
+                p4: vals[3].toFixed(2),
+                p5: vals[4].toFixed(2),
+                p6: vals[5].toFixed(2),
+                p7: vals[6].toFixed(2),
+                p8: vals[7].toFixed(2),
+                promedio: d.Promedio.toFixed(2)
+            });
+        }
+        
+        // Calcular promedios totales
+        let sumaTotalPromedios = 0;
+        listaAsignaturas.forEach(a => sumaTotalPromedios += parseFloat(a.promedio));
+        const promedioTodasAsignaturas = (sumaTotalPromedios / listaAsignaturas.length).toFixed(2);
+        const promedioTotalSobre100 = (parseFloat(promedioTodasAsignaturas) * 20).toFixed(2);
+        
+        // Escala cualitativa
+        const escala = (promedioTotalSobre100 >= 85) ? "Excelente" :
+                       (promedioTotalSobre100 >= 70) ? "Muy buena" :
+                       (promedioTotalSobre100 >= 60) ? "Regular" : "Deficiente";
+        
+        // Datos para heteroevaluación y demás (opcionales, pero se pueden llenar)
+        const contextData = {
+            docente: docente,
+            carrera: carrera,
+            ev100: promedioTotalSobre100,
+            total100: promedioTotalSobre100,
+            escala: escala,
+            promedioGlobal: promedioTodasAsignaturas,
+            promedioSobreCien: promedioTotalSobre100,
+            promedioTodasAsignaturas: promedioTodasAsignaturas,
+            asignaturas: listaAsignaturas,
+            // Datos de evaluación complementarios (se pueden personalizar)
+            heteroevaluacion: promedioTotalSobre100,
+            autoevaluacion: (promedioTotalSobre100 * 0.95).toFixed(2),
+            coevaluacionDirectivos: (promedioTotalSobre100 * 0.97).toFixed(2),
+            coevaluacionPares: (promedioTotalSobre100 * 0.96).toFixed(2),
+            evaluacionGestion: (promedioTotalSobre100 * 0.90).toFixed(2),
+            evaluacionVinculacion: (promedioTotalSobre100 * 0.92).toFixed(2),
+            evaluacionInvestigacion: (promedioTotalSobre100 * 0.88).toFixed(2),
+            // Placeholders individuales si se requieren
+            p1: pValues[0].toFixed(2),
+            p2: pValues[1].toFixed(2),
+            p3: pValues[2].toFixed(2),
+            p4: pValues[3].toFixed(2),
+            p5: pValues[4].toFixed(2),
+            p6: pValues[5].toFixed(2),
+            p7: pValues[6].toFixed(2),
+            p8: pValues[7].toFixed(2),
+            fechaActual: new Date().toLocaleDateString('es-ES')
+        };
+        
+        try {
+            const zip = new PizZip(plantillaBuffer);
+            const doc = new window.docxtemplater(zip, {
+                paragraphLoop: true,
+                linebreaks: true,
+                delimiters: { start: '{{', end: '}}' }
+            });
+            doc.setData(contextData);
+            doc.render();
+            const outBlob = doc.getZip().generate({ type: "blob" });
+            const nombreArchivo = `Informe_${docente.replace(/[^a-z0-9]/gi, '_')}_${cursoNombre.replace(/[^a-z0-9]/gi, '_')}.docx`;
+            saveAs(outBlob, nombreArchivo);
+            infoDiv.innerHTML = `✅ Informe generado: ${nombreArchivo}`;
+        } catch (error) {
+            console.error(error);
+            alert("Error al procesar la plantilla: " + error.message + "\nVerifica que las etiquetas en Word sean correctas: {{docente}}, {{carrera}}, {{#asignaturas}}{{nombre}}{{/asignaturas}}, etc.");
+            infoDiv.innerHTML = `❌ Error en generación. Revise consola.`;
+        }
+    }
+    
+    // Eventos de cascada
+    carreraSelect.addEventListener('change', filtrarDocentesPorCarrera);
+    docenteSelect.addEventListener('change', filtrarCursosPorDocente);
+    generateBtn.addEventListener('click', generarInforme);
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
 </script>
 </body>
 </html>
