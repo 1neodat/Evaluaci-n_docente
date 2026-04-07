@@ -10,39 +10,47 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
-    label { display:block; margin-top:10px; font-weight:bold; }
-    select, input[type="file"], button { width:100%; padding:8px; margin-top:4px; box-sizing:border-box; }
-    button { margin-top:14px; cursor:pointer; }
-    pre { background:#f4f4f4; padding:10px; border-radius:6px; white-space:pre-wrap; }
+    body { font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 16px; }
+    h1 { font-size: 22px; }
+    .box { border: 1px solid #ccc; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
+    label { display:block; margin:10px 0 6px; font-weight:bold; }
+    input[type="file"], select, button { width:100%; padding:10px; box-sizing:border-box; }
+    button { margin-top: 12px; cursor:pointer; }
+    pre { background:#f5f5f5; padding:12px; border-radius:6px; white-space:pre-wrap; }
   </style>
 </head>
 <body>
 
-  <h2>Generar informe docente</h2>
+  <h1>Generar informe docente</h1>
 
-  <label>Excel</label>
-  <input type="file" id="excelFile" accept=".xlsx,.xls" />
+  <div class="box">
+    <label for="excelFile">Excel</label>
+    <input type="file" id="excelFile" accept=".xlsx,.xls" />
 
-  <label>Word</label>
-  <input type="file" id="wordFile" accept=".docx" />
+    <label for="wordFile">Word</label>
+    <input type="file" id="wordFile" accept=".docx" />
 
-  <button id="btnLeer">Leer Excel</button>
+    <button id="btnLeer">Leer Excel</button>
+  </div>
 
-  <label>Docente</label>
-  <select id="docenteSelect" disabled>
-    <option value="">Seleccione</option>
-  </select>
+  <div class="box">
+    <label for="docenteSelect">Docente</label>
+    <select id="docenteSelect" disabled>
+      <option value="">Seleccione</option>
+    </select>
 
-  <label>Carrera</label>
-  <select id="carreraSelect" disabled>
-    <option value="">Seleccione</option>
-  </select>
+    <label for="carreraSelect">Carrera</label>
+    <select id="carreraSelect" disabled>
+      <option value="">Seleccione</option>
+    </select>
 
-  <button id="btnGenerar" disabled>Generar Word</button>
+    <button id="btnGenerar" disabled>Generar Word</button>
+  </div>
 
-  <h3>Estado</h3>
-  <pre id="log">Esperando...</pre>
+  <div class="box">
+    <strong>Estado</strong>
+    <pre id="log">Esperando...</pre>
+  </div>
 
   <script>
     let registros = [];
@@ -85,102 +93,132 @@
       return [...new Set(arr)];
     }
 
-    function leerBloquesExcel(workbook) {
+    function normal(s) {
+      return txt(s).toUpperCase();
+    }
+
+    function leerExcelCompleto(workbook) {
       const salida = [];
+      const mapa = new Map();
 
       workbook.SheetNames.forEach(sheetName => {
         const ws = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-        let docente = "";
-        let carrera = "";
+        let docenteActual = "";
+        let carreraActual = "";
 
         for (let i = 0; i < rows.length; i++) {
-          const r = rows[i] || [];
-          if (txt(r[2]) === "Docente:") docente = txt(r[3]);
-          if (txt(r[2]) === "Escuela:" || txt(r[2]) === "Carrera:") carrera = txt(r[3]);
-        }
+          const row = rows[i] || [];
 
-        if (!docente || !carrera) return;
+          for (let c = 0; c < row.length; c++) {
+            const valor = txt(row[c]);
 
-        const cursos = [];
+            if (valor === "Docente:" || valor === "Docente") {
+              const posible = txt(row[c + 1]);
+              if (posible) docenteActual = posible;
+            }
 
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i] || [];
-          if (txt(r[2]) === "Curso:" && txt(r[3]) !== "") {
-            const nombre = txt(r[3]);
-
-            const p1 = Number(rows[i + 2]?.[15]);
-            const p2 = Number(rows[i + 3]?.[15]);
-            const p3 = Number(rows[i + 4]?.[15]);
-            const p4 = Number(rows[i + 5]?.[15]);
-            const p5 = Number(rows[i + 6]?.[15]);
-            const p6 = Number(rows[i + 7]?.[15]);
-            const p7 = Number(rows[i + 8]?.[15]);
-            const p8 = Number(rows[i + 9]?.[15]);
-
-            const vals = [p1,p2,p3,p4,p5,p6,p7,p8];
-
-            if (vals.every(v => !Number.isNaN(v))) {
-              const promedioN = vals.reduce((a,b)=>a+b,0) / 8;
-              cursos.push({
-                nombre,
-                p1: fmt(p1),
-                p2: fmt(p2),
-                p3: fmt(p3),
-                p4: fmt(p4),
-                p5: fmt(p5),
-                p6: fmt(p6),
-                p7: fmt(p7),
-                p8: fmt(p8),
-                promedio: fmt(promedioN),
-                promedioN
-              });
+            if (
+              valor === "Escuela:" || valor === "Escuela" ||
+              valor === "Carrera:" || valor === "Carrera"
+            ) {
+              const posible = txt(row[c + 1]);
+              if (posible) carreraActual = posible;
             }
           }
-        }
 
-        if (cursos.length) {
-          const promedioTodasN = cursos.reduce((a,b)=>a+b.promedioN,0) / cursos.length;
-          salida.push({
-            sheetName,
-            docente,
-            carrera,
-            cursos,
-            promedio_todas_asignaturas: fmt(promedioTodasN),
-            promedio_total_100: fmt(promedioTodasN * 20)
-          });
+          const idxCurso = row.findIndex(v => txt(v) === "Curso:");
+          if (idxCurso !== -1) {
+            const nombreCurso = txt(row[idxCurso + 1]);
+
+            if (!docenteActual || !carreraActual || !nombreCurso) continue;
+
+            const notas = [];
+            for (let k = i + 2; k <= i + 9; k++) {
+              const num = Number(rows[k]?.[15]);
+              if (!Number.isNaN(num)) notas.push(num);
+            }
+
+            if (notas.length !== 8) continue;
+
+            const promedioN = notas.reduce((a, b) => a + b, 0) / 8;
+            const clave = normal(docenteActual) + "||" + normal(carreraActual);
+
+            if (!mapa.has(clave)) {
+              mapa.set(clave, {
+                sheetName,
+                docente: docenteActual,
+                carrera: carreraActual,
+                cursos: []
+              });
+            }
+
+            mapa.get(clave).cursos.push({
+              nombre: nombreCurso,
+              p1: fmt(notas[0]),
+              p2: fmt(notas[1]),
+              p3: fmt(notas[2]),
+              p4: fmt(notas[3]),
+              p5: fmt(notas[4]),
+              p6: fmt(notas[5]),
+              p7: fmt(notas[6]),
+              p8: fmt(notas[7]),
+              promedio: fmt(promedioN),
+              promedioN
+            });
+          }
         }
       });
+
+      for (const reg of mapa.values()) {
+        if (!reg.cursos.length) continue;
+
+        const promedioTodasN =
+          reg.cursos.reduce((a, b) => a + b.promedioN, 0) / reg.cursos.length;
+
+        salida.push({
+          ...reg,
+          promedio_todas_asignaturas: fmt(promedioTodasN),
+          promedio_total_100: fmt(promedioTodasN * 20)
+        });
+      }
 
       return salida;
     }
 
     function cargarDocentes() {
       const sel = document.getElementById("docenteSelect");
-      const docentes = unique(registros.map(x => x.docente)).sort((a,b)=>a.localeCompare(b,"es"));
+      const docentes = unique(registros.map(x => x.docente)).sort((a, b) => a.localeCompare(b, "es"));
       sel.innerHTML = '<option value="">Seleccione</option>';
+
       docentes.forEach(d => {
         const op = document.createElement("option");
         op.value = d;
         op.textContent = d;
         sel.appendChild(op);
       });
+
       sel.disabled = docentes.length === 0;
     }
 
     function cargarCarreras(docente) {
       const sel = document.getElementById("carreraSelect");
       const carreras = unique(
-        registros.filter(x => x.docente === docente).map(x => x.carrera)
-      ).sort((a,b)=>a.localeCompare(b,"es"));
+        registros
+          .filter(x => x.docente === docente)
+          .map(x => x.carrera)
+      ).sort((a, b) => a.localeCompare(b, "es"));
+
       sel.innerHTML = '<option value="">Seleccione</option>';
+
       carreras.forEach(c => {
         const op = document.createElement("option");
         op.value = c;
         op.textContent = c;
         sel.appendChild(op);
       });
+
       sel.disabled = carreras.length === 0;
       document.getElementById("btnGenerar").disabled = true;
     }
@@ -202,7 +240,9 @@
         f.includes("{{promedio}}")
       );
 
-      if (!plantilla) throw new Error("No existe la fila plantilla con {{nombre}}...{{promedio}}.");
+      if (!plantilla) {
+        throw new Error("No existe la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
+      }
 
       const generadas = cursos.map(c => {
         let f = plantilla;
@@ -224,25 +264,32 @@
 
     function reemplazarTexto(xml, data) {
       let out = xml;
-      Object.entries(data).forEach(([k,v]) => {
+      for (const [k, v] of Object.entries(data)) {
         out = repAll(out, "{{" + k + "}}", esc(v));
-      });
+      }
       return out;
     }
 
     document.getElementById("btnLeer").addEventListener("click", async () => {
       try {
-        if (typeof XLSX === "undefined") throw new Error("No cargó XLSX.");
-        const file = document.getElementById("excelFile").files[0];
-        if (!file) throw new Error("Seleccione el Excel.");
+        const excel = document.getElementById("excelFile").files[0];
+        if (!excel) throw new Error("Seleccione el Excel.");
 
-        const wb = XLSX.read(await readFile(file), { type: "array" });
-        registros = leerBloquesExcel(wb);
+        const wb = XLSX.read(await readFile(excel), { type: "array" });
+        registros = leerExcelCompleto(wb);
 
-        if (!registros.length) throw new Error("No se encontraron registros válidos.");
+        if (!registros.length) {
+          throw new Error("No se detectaron registros válidos en el Excel.");
+        }
 
         cargarDocentes();
-        log("Excel leído correctamente.\nSeleccione docente y carrera.");
+
+        log(
+          "Excel leído correctamente.\n" +
+          "Registros detectados: " + registros.length + "\n" +
+          "Docentes detectados: " + unique(registros.map(r => r.docente)).length + "\n" +
+          "Seleccione docente y carrera."
+        );
       } catch (e) {
         log("Error:\n" + e.message);
       }
@@ -255,9 +302,10 @@
     document.getElementById("carreraSelect").addEventListener("change", function () {
       const reg = getRegistroSeleccionado();
       document.getElementById("btnGenerar").disabled = !reg;
+
       if (reg) {
         log(
-          "Selección lista:\n" +
+          "Selección lista.\n" +
           "Docente: " + reg.docente + "\n" +
           "Carrera: " + reg.carrera + "\n" +
           "Cursos: " + reg.cursos.length
@@ -267,9 +315,6 @@
 
     document.getElementById("btnGenerar").addEventListener("click", async () => {
       try {
-        if (typeof PizZip === "undefined") throw new Error("No cargó PizZip.");
-        if (typeof saveAs === "undefined") throw new Error("No cargó FileSaver.");
-
         const word = document.getElementById("wordFile").files[0];
         if (!word) throw new Error("Seleccione el Word.");
 
