@@ -2,163 +2,125 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generador UIDE - Automatización Total</title>
+    <title>Generador UIDE Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        :root { --uide-blue: #003366; --uide-gold: #b8962d; }
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; max-width: 600px; width: 100%; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
-        .header { background: var(--uide-blue); color: white; padding: 20px; text-align: center; }
-        .content { padding: 25px; }
-        .input-group { margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; }
-        label { display: block; font-weight: bold; margin-bottom: 8px; color: var(--uide-blue); font-size: 0.9rem; }
-        select, button, input[type="file"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #ddd; }
-        button { background: var(--uide-gold); color: white; border: none; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; margin-top: 20px; }
-        button:hover { background: #9a7d25; transform: translateY(-2px); }
-        .status { padding: 10px; border-radius: 5px; text-align: center; font-size: 0.85rem; margin-top: 15px; background: #e7f3ff; color: #004085; }
+        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; color: #333; padding: 30px; border-radius: 15px; width: 100%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { color: #003366; text-align: center; margin-bottom: 25px; border-bottom: 3px solid #b8962d; padding-bottom: 10px; }
+        .step { background: #f4f7f9; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ddd; }
+        label { font-weight: bold; color: #003366; display: block; margin-bottom: 5px; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; font-size: 14px; }
+        button { background: #b8962d; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #9a7d25; transform: scale(1.02); }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <div class="header">
-        <h2 style="margin:0">UIDE - Generador de Informes</h2>
-        <p style="margin:5px 0 0; opacity:0.8">Carga Automática de Tabla de Asignaturas</p>
-    </div>
+    <h2>Generador UIDE</h2>
     
-    <div class="content">
-        <div class="input-group">
-            <label>1. EXCEL (Resultados P1-P8):</label>
-            <input type="file" id="excelInput" accept=".xlsx, .xls">
+    <div class="step">
+        <label>1. Archivo Excel (Datos):</label>
+        <input type="file" id="xl" accept=".xlsx" style="width:100%">
+    </div>
+
+    <div class="step">
+        <label>2. Plantilla Word:</label>
+        <input type="file" id="wd" accept=".docx" style="width:100%">
+    </div>
+
+    <div id="active" style="display:none">
+        <div class="step">
+            <label>Carrera:</label>
+            <select id="sc" onchange="updD()"></select>
+            <label style="margin-top:10px">Docente:</label>
+            <select id="sd"></select>
         </div>
-
-        <div class="input-group">
-            <label>2. WORD (Plantilla con etiquetas):</label>
-            <input type="file" id="wordInput" accept=".docx">
-        </div>
-
-        <div id="controles" style="display:none">
-            <label>CARRERA:</label>
-            <select id="selCarrera" onchange="cargarDocentes()"></select>
-
-            <label style="margin-top:15px">DOCENTE:</label>
-            <select id="selDocente"></select>
-
-            <button onclick="generarDocumento()">✨ GENERAR INFORME COMPLETADO</button>
-        </div>
-
-        <div id="mensaje" class="status">Esperando archivos...</div>
+        <button onclick="run()">DESCARGAR INFORME LLENO</button>
     </div>
 </div>
 
 <script>
-    let excelData = [];
-    let plantillaZip = null;
+let db = [];
+let tpl = null;
 
-    // 1. LEER EXCEL
-    document.getElementById('excelInput').addEventListener('change', function(e) {
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-            const data = new Uint8Array(evt.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            excelData = XLSX.utils.sheet_to_json(sheet);
-            
-            const carreras = [...new Set(excelData.map(r => r.Escuela).filter(Boolean))].sort();
-            const comboC = document.getElementById('selCarrera');
-            comboC.innerHTML = '<option value="">-- Seleccione Carrera --</option>' + 
-                               carreras.map(c => `<option value="${c}">${c}</option>`).join('');
-            
-            checkStatus();
-        };
-        reader.readAsArrayBuffer(e.target.files[0]);
-    });
+document.getElementById('xl').onchange = function(e) {
+    const r = new FileReader();
+    r.onload = (ev) => {
+        const b = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
+        const s = b.Sheets["Eval docente individual"] || b.Sheets[b.SheetNames[0]];
+        db = XLSX.utils.sheet_to_json(s);
+        const cats = [...new Set(db.map(x => x.Escuela).filter(Boolean))].sort();
+        document.getElementById('sc').innerHTML = '<option value="">-- Elige Carrera --</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        check();
+    };
+    r.readAsArrayBuffer(e.target.files[0]);
+};
 
-    // 2. LEER WORD
-    document.getElementById('wordInput').addEventListener('change', function(e) {
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-            plantillaZip = evt.target.result;
-            checkStatus();
-        };
-        reader.readAsArrayBuffer(e.target.files[0]);
-    });
+document.getElementById('wd').onchange = function(e) {
+    const r = new FileReader();
+    r.onload = (ev) => { tpl = ev.target.result; check(); };
+    r.readAsArrayBuffer(e.target.files[0]);
+};
 
-    function checkStatus() {
-        if(excelData.length > 0 && plantillaZip) {
-            document.getElementById('controles').style.display = 'block';
-            document.getElementById('mensaje').innerHTML = "✅ Archivos listos. Seleccione docente.";
-        }
+function check() { if(db.length && tpl) document.getElementById('active').style.display='block'; }
+
+function updD() {
+    const c = document.getElementById('sc').value;
+    const ds = [...new Set(db.filter(x => x.Escuela === c).map(x => x.Docente))].sort();
+    document.getElementById('sd').innerHTML = ds.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+function run() {
+    const dName = document.getElementById('sd').value;
+    const cName = document.getElementById('sc').value;
+    const rows = db.filter(x => x.Docente === dName);
+
+    // Preparar lista de asignaturas (Imagen 2)
+    const asignaturas = rows.map(m => ({
+        nombre: m.Asignatura || m.Curso || "S/N",
+        p1: Number(m.P1 || 0).toFixed(2),
+        p2: Number(m.P2 || 0).toFixed(2),
+        p3: Number(m.P3 || 0).toFixed(2),
+        p4: Number(m.P4 || 0).toFixed(2),
+        p5: Number(m.P5 || 0).toFixed(2),
+        p6: Number(m.P6 || 0).toFixed(2),
+        p7: Number(m.P7 || 0).toFixed(2),
+        p8: Number(m.P8 || 0).toFixed(2),
+        promedio: Number(m.Promedio || 0).toFixed(2)
+    }));
+
+    // Cálculo final basado en promedio de materias
+    const avg = asignaturas.reduce((a, b) => a + parseFloat(b.promedio), 0) / asignaturas.length;
+    const n100 = (avg * 20).toFixed(2);
+
+    try {
+        const zip = new PizZip(tpl);
+        const doc = new window.docxtemplater(zip, { 
+            paragraphLoop: true, 
+            linebreaks: true,
+            delimiters: {start: '{{', end: '}}'} // Forzar detección limpia
+        });
+
+        doc.render({
+            docente: dName,
+            carrera: cName,
+            asignaturas: asignaturas,
+            ev100: n100,
+            total100: n100,
+            escala: n100 >= 85 ? "Excelente" : (n100 >= 70 ? "Muy buena" : "Regular")
+        });
+
+        const out = doc.getZip().generate({type: "blob"});
+        saveAs(out, `Informe_UIDE_${dName}.docx`);
+    } catch (e) {
+        alert("Error: Asegúrate de que las llaves {{ }} no tengan formatos diferentes dentro del Word.");
     }
-
-    function cargarDocentes() {
-        const carrera = document.getElementById('selCarrera').value;
-        const docentes = [...new Set(excelData.filter(r => r.Escuela === carrera).map(r => r.Docente))].sort();
-        const comboD = document.getElementById('selDocente');
-        comboD.innerHTML = '<option value="">-- Seleccione Docente --</option>' + 
-                           docentes.map(d => `<option value="${d}">${d}</option>`).join('');
-    }
-
-    function generarDocumento() {
-        const docenteNombre = document.getElementById('selDocente').value;
-        const carreraNombre = document.getElementById('selCarrera').value;
-        if(!docenteNombre) return alert("Seleccione un docente");
-
-        // Filtrar todas las materias de ese docente
-        const materiasDocente = excelData.filter(r => r.Docente === docenteNombre);
-        
-        // Mapear datos para la tabla de Word (Imagen 2)
-        const listaParaWord = materiasDocente.map(m => ({
-            nombre: m.Asignatura || m.Curso,
-            p1: Number(m.P1 || 0).toFixed(2),
-            p2: Number(m.P2 || 0).toFixed(2),
-            p3: Number(m.P3 || 0).toFixed(2),
-            p4: Number(m.P4 || 0).toFixed(2),
-            p5: Number(m.P5 || 0).toFixed(2),
-            p6: Number(m.P6 || 0).toFixed(2),
-            p7: Number(m.P7 || 0).toFixed(2),
-            p8: Number(m.P8 || 0).toFixed(2),
-            promedio: Number(m.Promedio || 0).toFixed(2)
-        }));
-
-        // Calcular promedio final (Base 100)
-        let sumaPromedios = 0;
-        listaParaWord.forEach(m => sumaPromedios += parseFloat(m.promedio));
-        const promedioFinal5 = (sumaPromedios / listaParaWord.length);
-        const nota100 = (promedioFinal5 * 20).toFixed(2);
-
-        // Escala cualitativa
-        let escala = "Deficiente";
-        if(nota100 >= 85) escala = "Excelente";
-        else if(nota100 >= 70) escala = "Muy buena";
-        else if(nota100 >= 60) escala = "Regular";
-
-        try {
-            const zip = new PizZip(plantillaZip);
-            const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-
-            doc.setData({
-                docente: docenteNombre,
-                carrera: carreraNombre,
-                asignaturas: listaParaWord, // Esto llena la tabla dinámica
-                ev100: nota100,
-                total100: nota100,
-                escala: escala
-            });
-
-            doc.render();
-            const out = doc.getZip().generate({type: "blob"});
-            saveAs(out, `Informe_${docenteNombre.replace(/ /g, '_')}.docx`);
-            document.getElementById('mensaje').innerHTML = "✅ ¡Documento generado con éxito!";
-            
-        } catch (error) {
-            console.error(error);
-            alert("Error: Revisa que las etiquetas en el Word coincidan (especialmente {#asignaturas})");
-        }
-    }
+}
 </script>
 </body>
 </html>
