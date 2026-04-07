@@ -8,116 +8,114 @@
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; justify-content: center; padding: 30px; }
-        .container { background: white; color: #333; padding: 25px; border-radius: 15px; width: 480px; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
-        h2 { color: #003366; text-align: center; margin-bottom: 5px; }
-        .box { background: #f8f9fa; border: 2px dashed #003366; padding: 15px; border-radius: 8px; margin: 15px 0; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; font-size: 14px; }
-        button { background: #003366; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        label { font-weight: bold; font-size: 13px; color: #555; }
+        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: white; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .card { background: white; color: #333; padding: 30px; border-radius: 15px; width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .input-group { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; color: #003366; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; }
+        button { background: #003366; color: white; border: none; font-weight: bold; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0055a4; }
+        .status { font-size: 12px; text-align: center; margin-top: 10px; color: #666; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Generador de Informes</h2>
-    <p style="text-align:center; font-size: 12px; color: #666;">Enlace directo Excel a Word</p>
-
-    <div class="box">
-        <label>1. Cargar Excel (Evaluación):</label>
-        <input type="file" id="inputExcel" accept=".xlsx" style="margin-top:10px; width:100%;">
+<div class="card">
+    <h2 style="text-align:center; color:#003366;">Generador de Informes</h2>
+    
+    <div class="input-group">
+        <label>1. Cargar Excel de Evaluación:</label>
+        <input type="file" id="upExcel" accept=".xlsx">
     </div>
 
-    <div class="box">
+    <div class="input-group">
         <label>2. Cargar Plantilla Word:</label>
-        <input type="file" id="inputWord" accept=".docx" style="margin-top:10px; width:100%;">
+        <input type="file" id="upWord" accept=".docx">
     </div>
 
-    <div id="controles" style="display:none;">
-        <label>Carrera / Escuela:</label>
+    <div id="formRecursos" style="display:none;">
+        <label>Seleccione Carrera:</label>
         <select id="selCarrera" onchange="actualizarDocentes()"></select>
 
-        <label>Docente:</label>
+        <label>Seleccione Docente:</label>
         <select id="selDocente"></select>
 
-        <button id="btnProcesar" onclick="generarDocumento()">GENERAR Y LLENAR WORD</button>
+        <button onclick="procesar()">GENERAR INFORME LLENO</button>
     </div>
+    <div id="info" class="status">Cargue los archivos para comenzar</div>
 </div>
 
 <script>
-let excelData = [];
-let wordBuffer = null;
+let dataFilas = [];
+let bufferPlantilla = null;
 
-// LECTURA DE EXCEL
-document.getElementById('inputExcel').addEventListener('change', function(e) {
+// Leer Excel
+document.getElementById('upExcel').addEventListener('change', function(e) {
     const reader = new FileReader();
     reader.onload = (evt) => {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const sheet = workbook.Sheets["BD"] || workbook.Sheets[workbook.SheetNames[0]];
-        excelData = XLSX.utils.sheet_to_json(sheet);
+        const wb = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+        const sheet = wb.Sheets["BD"] || wb.Sheets[wb.SheetNames[0]];
+        dataFilas = XLSX.utils.sheet_to_json(sheet);
         
-        const carreras = [...new Set(excelData.map(d => d.Escuela).filter(Boolean))].sort();
-        const selC = document.getElementById("selCarrera");
-        selC.innerHTML = '<option value="">-- Seleccione Carrera --</option>';
-        carreras.forEach(c => selC.innerHTML += `<option value="${c}">${c}</option>`);
-        
-        mostrarControles();
+        const carreras = [...new Set(dataFilas.map(f => f.Escuela).filter(Boolean))].sort();
+        const combo = document.getElementById("selCarrera");
+        combo.innerHTML = '<option value="">-- Carreras --</option>';
+        carreras.forEach(c => combo.innerHTML += `<option value="${c}">${c}</option>`);
+        verificarCarga();
     };
     reader.readAsArrayBuffer(e.target.files[0]);
 });
 
-// LECTURA DE WORD
-document.getElementById('inputWord').addEventListener('change', function(e) {
+// Leer Word
+document.getElementById('upWord').addEventListener('change', function(e) {
     const reader = new FileReader();
     reader.onload = (evt) => {
-        wordBuffer = evt.target.result;
-        mostrarControles();
+        bufferPlantilla = evt.target.result;
+        verificarCarga();
     };
     reader.readAsArrayBuffer(e.target.files[0]);
 });
 
-function mostrarControles() {
-    if (excelData.length > 0 && wordBuffer) {
-        document.getElementById("controles").style.display = "block";
+function verificarCarga() {
+    if(dataFilas.length > 0 && bufferPlantilla) {
+        document.getElementById("formRecursos").style.display = "block";
+        document.getElementById("info").innerText = "✅ Archivos listos para procesar";
     }
 }
 
 function actualizarDocentes() {
     const carrera = document.getElementById("selCarrera").value;
-    const selD = document.getElementById("selDocente");
-    selD.innerHTML = "";
-    const filtrados = [...new Set(excelData.filter(d => d.Escuela === carrera).map(d => d.Docente))].sort();
-    filtrados.forEach(d => selD.innerHTML += `<option value="${d}">${d}</option>`);
+    const comboD = document.getElementById("selDocente");
+    comboD.innerHTML = "";
+    const filtrados = [...new Set(dataFilas.filter(f => f.Escuela === carrera).map(f => f.Docente))].sort();
+    filtrados.forEach(d => comboD.innerHTML += `<option value="${d}">${d}</option>`);
 }
 
-async function generarDocumento() {
+async function procesar() {
     const docenteNombre = document.getElementById("selDocente").value;
-    const fila = excelData.find(d => d.Docente === docenteNombre);
-
-    if (!fila) return alert("Error al encontrar datos del docente.");
+    const registro = dataFilas.find(f => f.Docente === docenteNombre);
 
     try {
-        const zip = new PizZip(wordBuffer);
+        const zip = new PizZip(bufferPlantilla);
         const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-        // Cálculo: Promedio (1-5) a base 100
-        const puntaje = (parseFloat(fila.Promedio) * 20).toFixed(2);
+        // Convertir promedio de base 5 a base 100
+        const notaFinal = (parseFloat(registro.Promedio) * 20).toFixed(2);
 
-        // ENLACE DE DATOS
+        // MAPEO DE DATOS A LAS LLAVES {{ }}
         doc.render({
-            docente: fila.Docente,
-            carrera: fila.Escuela,
-            ev100: puntaje,
-            total100: puntaje,
-            escala: puntaje >= 85 ? "Excelente" : (puntaje >= 70 ? "Muy buena" : "Regular")
+            docente: registro.Docente,
+            carrera: registro.Escuela,
+            ev100: notaFinal,
+            total100: notaFinal,
+            escala: notaFinal >= 85 ? "Excelente" : (notaFinal >= 70 ? "Muy buena" : "Regular")
         });
 
         const out = doc.getZip().generate({type: "blob"});
         saveAs(out, `Informe_${docenteNombre.replace(/ /g, "_")}.docx`);
-    } catch (err) {
-        alert("Error: " + err.message);
+        
+    } catch (error) {
+        alert("Error: Asegúrate de que el Word tenga las etiquetas {{docente}}, {{ev100}}, etc.");
     }
 }
 </script>
