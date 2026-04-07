@@ -10,477 +10,296 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: 24px auto;
-      padding: 0 16px;
-    }
-    h1 {
-      font-size: 24px;
-      margin-bottom: 16px;
-    }
-    .box {
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 18px;
-    }
-    label {
-      display: block;
-      font-weight: bold;
-      margin: 10px 0 6px;
-    }
-    input[type="file"], select {
-      width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-    }
-    button {
-      padding: 12px 18px;
-      cursor: pointer;
-      font-size: 15px;
-      margin-top: 14px;
-      margin-right: 10px;
-    }
-    pre {
-      background: #f7f7f7;
-      border-radius: 6px;
-      padding: 12px;
-      white-space: pre-wrap;
-      overflow: auto;
-    }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; }
+    label { display:block; margin-top:10px; font-weight:bold; }
+    select, input[type="file"], button { width:100%; padding:8px; margin-top:4px; box-sizing:border-box; }
+    button { margin-top:14px; cursor:pointer; }
+    pre { background:#f4f4f4; padding:10px; border-radius:6px; white-space:pre-wrap; }
   </style>
 </head>
 <body>
 
-  <h1>Generar informe de evaluación docente</h1>
+  <h2>Generar informe docente</h2>
 
-  <div class="box">
-    <label for="excelFile">Excel de evaluación docente</label>
-    <input type="file" id="excelFile" accept=".xlsx,.xls" />
+  <label>Excel</label>
+  <input type="file" id="excelFile" accept=".xlsx,.xls" />
 
-    <label for="wordFile">Plantilla Word</label>
-    <input type="file" id="wordFile" accept=".docx" />
+  <label>Word</label>
+  <input type="file" id="wordFile" accept=".docx" />
 
-    <button id="btnLeerExcel">Leer Excel</button>
-  </div>
+  <button id="btnLeer">Leer Excel</button>
 
-  <div class="box">
-    <label for="docenteSelect">Docente</label>
-    <select id="docenteSelect" disabled>
-      <option value="">Seleccione un docente</option>
-    </select>
+  <label>Docente</label>
+  <select id="docenteSelect" disabled>
+    <option value="">Seleccione</option>
+  </select>
 
-    <label for="carreraSelect">Carrera</label>
-    <select id="carreraSelect" disabled>
-      <option value="">Seleccione una carrera</option>
-    </select>
+  <label>Carrera</label>
+  <select id="carreraSelect" disabled>
+    <option value="">Seleccione</option>
+  </select>
 
-    <button id="btnProcesar" disabled>Procesar y descargar Word</button>
-  </div>
+  <button id="btnGenerar" disabled>Generar Word</button>
 
-  <div class="box">
-    <strong>Estado</strong>
-    <pre id="log">Esperando archivos...</pre>
-  </div>
+  <h3>Estado</h3>
+  <pre id="log">Esperando...</pre>
 
   <script>
-    let registrosExcel = [];
-    let cacheWorkbook = null;
+    let registros = [];
 
     function log(msg) {
       document.getElementById("log").textContent = msg;
     }
 
-    function readFileAsArrayBuffer(file) {
+    function readFile(file) {
       return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
+        const r = new FileReader();
+        r.onload = e => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsArrayBuffer(file);
       });
     }
 
-    function round2(n) {
-      const num = Number(n);
-      if (Number.isNaN(num)) return "";
-      return num.toFixed(2).replace(".", ",");
+    function txt(v) {
+      return String(v ?? "").trim();
     }
 
-    function escapeXml(value) {
-      return String(value ?? "")
+    function fmt(n) {
+      const x = Number(n);
+      if (Number.isNaN(x)) return "";
+      return x.toFixed(2).replace(".", ",");
+    }
+
+    function esc(s) {
+      return String(s ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
     }
 
-    function getText(v) {
-      return String(v ?? "").trim();
+    function repAll(text, find, repl) {
+      return text.split(find).join(repl);
     }
 
-    function replaceAllSafe(text, search, replacement) {
-      return text.split(search).join(replacement);
+    function unique(arr) {
+      return [...new Set(arr)];
     }
 
-    function uniqueSorted(values) {
-      return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
-    }
-
-    function findFirstValueInRow(row, startIndex = 0) {
-      for (let i = startIndex; i < row.length; i++) {
-        const val = getText(row[i]);
-        if (val !== "") return val;
-      }
-      return "";
-    }
-
-    function getValueRightOfLabelInSheet(rows, labels) {
-      for (let r = 0; r < rows.length; r++) {
-        const row = rows[r] || [];
-        for (let c = 0; c < row.length; c++) {
-          const cell = getText(row[c]);
-          if (labels.includes(cell)) {
-            const sameRow = findFirstValueInRow(row, c + 1);
-            if (sameRow) return sameRow;
-
-            const nextRow = rows[r + 1] || [];
-            const downValue = findFirstValueInRow(nextRow, c);
-            if (downValue) return downValue;
-          }
-        }
-      }
-      return "";
-    }
-
-    function extractCursosFromRows(rows) {
-      const cursos = [];
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i] || [];
-
-        const idxCurso = row.findIndex(cell => getText(cell) === "Curso:");
-        if (idxCurso !== -1) {
-          const nombreCurso = getText(row[idxCurso + 1]);
-          if (!nombreCurso) continue;
-
-          const valores = [];
-
-          for (let j = i + 1; j < Math.min(i + 20, rows.length); j++) {
-            const r = rows[j] || [];
-
-            const textoFila = r.map(getText).join(" | ");
-            const num = Number(r[15]);
-
-            if (!Number.isNaN(num)) {
-              valores.push(num);
-              if (valores.length === 8) break;
-            }
-
-            if (valores.length > 0 && textoFila.includes("Nota del curso")) {
-              break;
-            }
-          }
-
-          if (valores.length >= 8) {
-            const p = valores.slice(0, 8);
-            const promedio = p.reduce((a, b) => a + b, 0) / 8;
-
-            cursos.push({
-              nombre: nombreCurso,
-              p1n: p[0],
-              p2n: p[1],
-              p3n: p[2],
-              p4n: p[3],
-              p5n: p[4],
-              p6n: p[5],
-              p7n: p[6],
-              p8n: p[7],
-              promedioN: promedio,
-              p1: round2(p[0]),
-              p2: round2(p[1]),
-              p3: round2(p[2]),
-              p4: round2(p[3]),
-              p5: round2(p[4]),
-              p6: round2(p[5]),
-              p7: round2(p[6]),
-              p8: round2(p[7]),
-              promedio: round2(promedio)
-            });
-          }
-        }
-      }
-
-      return cursos;
-    }
-
-    function extractRegistrosFromWorkbook(workbook) {
-      const registros = [];
+    function leerBloquesExcel(workbook) {
+      const salida = [];
 
       workbook.SheetNames.forEach(sheetName => {
         const ws = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(ws, {
-          header: 1,
-          raw: true,
-          defval: ""
-        });
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-        const docente = getValueRightOfLabelInSheet(rows, ["Docente:", "Docente"]);
-        const carrera = getValueRightOfLabelInSheet(rows, ["Escuela:", "Escuela", "Carrera:", "Carrera"]);
-        const cursos = extractCursosFromRows(rows);
+        let docente = "";
+        let carrera = "";
 
-        if (docente && carrera && cursos.length) {
-          const promedioTodasAsignaturasN =
-            cursos.reduce((acc, c) => acc + c.promedioN, 0) / cursos.length;
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i] || [];
+          if (txt(r[2]) === "Docente:") docente = txt(r[3]);
+          if (txt(r[2]) === "Escuela:" || txt(r[2]) === "Carrera:") carrera = txt(r[3]);
+        }
 
-          const promedioTotal100N = promedioTodasAsignaturasN * 20;
+        if (!docente || !carrera) return;
 
-          registros.push({
-            id: `${sheetName}__${docente}__${carrera}`,
+        const cursos = [];
+
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i] || [];
+          if (txt(r[2]) === "Curso:" && txt(r[3]) !== "") {
+            const nombre = txt(r[3]);
+
+            const p1 = Number(rows[i + 2]?.[15]);
+            const p2 = Number(rows[i + 3]?.[15]);
+            const p3 = Number(rows[i + 4]?.[15]);
+            const p4 = Number(rows[i + 5]?.[15]);
+            const p5 = Number(rows[i + 6]?.[15]);
+            const p6 = Number(rows[i + 7]?.[15]);
+            const p7 = Number(rows[i + 8]?.[15]);
+            const p8 = Number(rows[i + 9]?.[15]);
+
+            const vals = [p1,p2,p3,p4,p5,p6,p7,p8];
+
+            if (vals.every(v => !Number.isNaN(v))) {
+              const promedioN = vals.reduce((a,b)=>a+b,0) / 8;
+              cursos.push({
+                nombre,
+                p1: fmt(p1),
+                p2: fmt(p2),
+                p3: fmt(p3),
+                p4: fmt(p4),
+                p5: fmt(p5),
+                p6: fmt(p6),
+                p7: fmt(p7),
+                p8: fmt(p8),
+                promedio: fmt(promedioN),
+                promedioN
+              });
+            }
+          }
+        }
+
+        if (cursos.length) {
+          const promedioTodasN = cursos.reduce((a,b)=>a+b.promedioN,0) / cursos.length;
+          salida.push({
             sheetName,
             docente,
             carrera,
             cursos,
-            promedioTodasAsignaturasN,
-            promedioTotal100N,
-            promedioTodasAsignaturas: round2(promedioTodasAsignaturasN),
-            promedioTotal100: round2(promedioTotal100N)
+            promedio_todas_asignaturas: fmt(promedioTodasN),
+            promedio_total_100: fmt(promedioTodasN * 20)
           });
         }
       });
 
-      return registros;
+      return salida;
     }
 
-    function fillDocenteSelect() {
-      const select = document.getElementById("docenteSelect");
-      const docentes = uniqueSorted(registrosExcel.map(r => r.docente));
-
-      select.innerHTML = '<option value="">Seleccione un docente</option>';
-      docentes.forEach(docente => {
-        const option = document.createElement("option");
-        option.value = docente;
-        option.textContent = docente;
-        select.appendChild(option);
+    function cargarDocentes() {
+      const sel = document.getElementById("docenteSelect");
+      const docentes = unique(registros.map(x => x.docente)).sort((a,b)=>a.localeCompare(b,"es"));
+      sel.innerHTML = '<option value="">Seleccione</option>';
+      docentes.forEach(d => {
+        const op = document.createElement("option");
+        op.value = d;
+        op.textContent = d;
+        sel.appendChild(op);
       });
-
-      select.disabled = docentes.length === 0;
+      sel.disabled = docentes.length === 0;
     }
 
-    function fillCarreraSelect(docente) {
-      const select = document.getElementById("carreraSelect");
-      const carreras = uniqueSorted(
-        registrosExcel
-          .filter(r => r.docente === docente)
-          .map(r => r.carrera)
-      );
-
-      select.innerHTML = '<option value="">Seleccione una carrera</option>';
-      carreras.forEach(carrera => {
-        const option = document.createElement("option");
-        option.value = carrera;
-        option.textContent = carrera;
-        select.appendChild(option);
+    function cargarCarreras(docente) {
+      const sel = document.getElementById("carreraSelect");
+      const carreras = unique(
+        registros.filter(x => x.docente === docente).map(x => x.carrera)
+      ).sort((a,b)=>a.localeCompare(b,"es"));
+      sel.innerHTML = '<option value="">Seleccione</option>';
+      carreras.forEach(c => {
+        const op = document.createElement("option");
+        op.value = c;
+        op.textContent = c;
+        sel.appendChild(op);
       });
-
-      select.disabled = carreras.length === 0;
-      document.getElementById("btnProcesar").disabled = true;
+      sel.disabled = carreras.length === 0;
+      document.getElementById("btnGenerar").disabled = true;
     }
 
     function getRegistroSeleccionado() {
       const docente = document.getElementById("docenteSelect").value;
       const carrera = document.getElementById("carreraSelect").value;
-
-      return registrosExcel.find(r => r.docente === docente && r.carrera === carrera) || null;
+      return registros.find(x => x.docente === docente && x.carrera === carrera) || null;
     }
 
-    function reemplazarTextoSimple(xml, mapa) {
-      let result = xml;
-      for (const [key, value] of Object.entries(mapa)) {
-        result = replaceAllSafe(result, `{{${key}}}`, escapeXml(value));
-      }
-      return result;
-    }
+    function reemplazarTablaCursos(xml, cursos) {
+      const filas = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g);
+      if (!filas) throw new Error("No se pudieron leer las filas del Word.");
 
-    function reemplazarFilasCursos(xml, cursos) {
-      const rowRegex = /<w:tr[\s\S]*?<\/w:tr>/g;
-      const rows = xml.match(rowRegex);
-
-      if (!rows || !rows.length) {
-        throw new Error("No se pudieron leer las filas del Word.");
-      }
-
-      const filasPlantilla = rows.filter(r =>
-        r.includes("{{nombre}}") &&
-        r.includes("{{p1}}") &&
-        r.includes("{{p8}}") &&
-        r.includes("{{promedio}}")
+      const plantilla = filas.find(f =>
+        f.includes("{{nombre}}") &&
+        f.includes("{{p1}}") &&
+        f.includes("{{p8}}") &&
+        f.includes("{{promedio}}")
       );
 
-      if (!filasPlantilla.length) {
-        throw new Error("No se encontró la fila plantilla con {{nombre}}, {{p1}}...{{p8}}, {{promedio}}.");
-      }
+      if (!plantilla) throw new Error("No existe la fila plantilla con {{nombre}}...{{promedio}}.");
 
-      const templateRow = filasPlantilla[0];
-
-      const filasGeneradas = cursos.map(curso => {
-        let row = templateRow;
-        row = replaceAllSafe(row, "{{nombre}}", escapeXml(curso.nombre));
-        row = replaceAllSafe(row, "{{p1}}", escapeXml(curso.p1));
-        row = replaceAllSafe(row, "{{p2}}", escapeXml(curso.p2));
-        row = replaceAllSafe(row, "{{p3}}", escapeXml(curso.p3));
-        row = replaceAllSafe(row, "{{p4}}", escapeXml(curso.p4));
-        row = replaceAllSafe(row, "{{p5}}", escapeXml(curso.p5));
-        row = replaceAllSafe(row, "{{p6}}", escapeXml(curso.p6));
-        row = replaceAllSafe(row, "{{p7}}", escapeXml(curso.p7));
-        row = replaceAllSafe(row, "{{p8}}", escapeXml(curso.p8));
-        row = replaceAllSafe(row, "{{promedio}}", escapeXml(curso.promedio));
-        return row;
+      const generadas = cursos.map(c => {
+        let f = plantilla;
+        f = repAll(f, "{{nombre}}", esc(c.nombre));
+        f = repAll(f, "{{p1}}", esc(c.p1));
+        f = repAll(f, "{{p2}}", esc(c.p2));
+        f = repAll(f, "{{p3}}", esc(c.p3));
+        f = repAll(f, "{{p4}}", esc(c.p4));
+        f = repAll(f, "{{p5}}", esc(c.p5));
+        f = repAll(f, "{{p6}}", esc(c.p6));
+        f = repAll(f, "{{p7}}", esc(c.p7));
+        f = repAll(f, "{{p8}}", esc(c.p8));
+        f = repAll(f, "{{promedio}}", esc(c.promedio));
+        return f;
       }).join("");
 
-      let nuevoXml = xml;
+      return xml.replace(plantilla, generadas);
+    }
 
-      filasPlantilla.forEach((fila, index) => {
-        if (index === 0) {
-          nuevoXml = nuevoXml.replace(fila, filasGeneradas);
-        } else {
-          nuevoXml = nuevoXml.replace(fila, "");
-        }
+    function reemplazarTexto(xml, data) {
+      let out = xml;
+      Object.entries(data).forEach(([k,v]) => {
+        out = repAll(out, "{{" + k + "}}", esc(v));
       });
-
-      return nuevoXml;
+      return out;
     }
 
-    async function leerExcel() {
+    document.getElementById("btnLeer").addEventListener("click", async () => {
       try {
-        if (typeof XLSX === "undefined") {
-          throw new Error("No se cargó la librería XLSX.");
-        }
+        if (typeof XLSX === "undefined") throw new Error("No cargó XLSX.");
+        const file = document.getElementById("excelFile").files[0];
+        if (!file) throw new Error("Seleccione el Excel.");
 
-        const excelFile = document.getElementById("excelFile").files[0];
-        if (!excelFile) {
-          throw new Error("Debe seleccionar el archivo Excel.");
-        }
+        const wb = XLSX.read(await readFile(file), { type: "array" });
+        registros = leerBloquesExcel(wb);
 
-        log("Leyendo Excel...");
-        const buffer = await readFileAsArrayBuffer(excelFile);
-        const workbook = XLSX.read(buffer, { type: "array" });
-        cacheWorkbook = workbook;
+        if (!registros.length) throw new Error("No se encontraron registros válidos.");
 
-        registrosExcel = extractRegistrosFromWorkbook(workbook);
-
-        if (!registrosExcel.length) {
-          throw new Error("No se encontraron registros válidos de docente + carrera + cursos en el Excel.");
-        }
-
-        fillDocenteSelect();
-
-        log(
-          "Excel leído correctamente.\n\n" +
-          "Registros encontrados: " + registrosExcel.length + "\n" +
-          "Docentes encontrados: " + uniqueSorted(registrosExcel.map(r => r.docente)).length + "\n" +
-          "Seleccione docente y carrera."
-        );
-      } catch (error) {
-        console.error(error);
-        log("Error:\n" + error.message);
+        cargarDocentes();
+        log("Excel leído correctamente.\nSeleccione docente y carrera.");
+      } catch (e) {
+        log("Error:\n" + e.message);
       }
-    }
+    });
 
-    async function procesarWord() {
+    document.getElementById("docenteSelect").addEventListener("change", function () {
+      cargarCarreras(this.value);
+    });
+
+    document.getElementById("carreraSelect").addEventListener("change", function () {
+      const reg = getRegistroSeleccionado();
+      document.getElementById("btnGenerar").disabled = !reg;
+      if (reg) {
+        log(
+          "Selección lista:\n" +
+          "Docente: " + reg.docente + "\n" +
+          "Carrera: " + reg.carrera + "\n" +
+          "Cursos: " + reg.cursos.length
+        );
+      }
+    });
+
+    document.getElementById("btnGenerar").addEventListener("click", async () => {
       try {
-        if (typeof PizZip === "undefined") {
-          throw new Error("No se cargó la librería PizZip.");
-        }
-        if (typeof saveAs === "undefined") {
-          throw new Error("No se cargó la librería FileSaver.");
-        }
+        if (typeof PizZip === "undefined") throw new Error("No cargó PizZip.");
+        if (typeof saveAs === "undefined") throw new Error("No cargó FileSaver.");
 
-        const wordFile = document.getElementById("wordFile").files[0];
-        if (!wordFile) {
-          throw new Error("Debe seleccionar la plantilla Word.");
-        }
+        const word = document.getElementById("wordFile").files[0];
+        if (!word) throw new Error("Seleccione el Word.");
 
-        if (!registrosExcel.length) {
-          throw new Error("Primero debe leer el Excel.");
-        }
+        const reg = getRegistroSeleccionado();
+        if (!reg) throw new Error("Seleccione docente y carrera.");
 
-        const registro = getRegistroSeleccionado();
-        if (!registro) {
-          throw new Error("Debe seleccionar docente y carrera.");
-        }
+        const zip = new PizZip(await readFile(word));
+        let xml = zip.file("word/document.xml").asText();
 
-        log("Procesando Word...");
-
-        const wordBuffer = await readFileAsArrayBuffer(wordFile);
-        const zip = new PizZip(wordBuffer);
-        const documentFile = zip.file("word/document.xml");
-
-        if (!documentFile) {
-          throw new Error("No existe word/document.xml dentro del .docx.");
-        }
-
-        let documentXml = documentFile.asText();
-
-        documentXml = reemplazarFilasCursos(documentXml, registro.cursos);
-
-        documentXml = reemplazarTextoSimple(documentXml, {
-          docente: registro.docente,
-          carrera: registro.carrera,
-          promedio_todas_asignaturas: registro.promedioTodasAsignaturas,
-          promedio_total_100: registro.promedioTotal100
+        xml = reemplazarTablaCursos(xml, reg.cursos);
+        xml = reemplazarTexto(xml, {
+          docente: reg.docente,
+          carrera: reg.carrera,
+          promedio_todas_asignaturas: reg.promedio_todas_asignaturas,
+          promedio_total_100: reg.promedio_total_100
         });
 
-        zip.file("word/document.xml", documentXml);
+        zip.file("word/document.xml", xml);
 
-        const output = zip.generate({
+        const blob = zip.generate({
           type: "blob",
           mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         });
 
-        const safeDocente = registro.docente.replace(/[\\/:*?"<>|]+/g, "_");
-        const safeCarrera = registro.carrera.replace(/[\\/:*?"<>|]+/g, "_");
-
-        saveAs(output, `Informe_${safeDocente}_${safeCarrera}.docx`);
-
-        log(
-          "Proceso completado.\n\n" +
-          "Docente: " + registro.docente + "\n" +
-          "Carrera: " + registro.carrera + "\n" +
-          "Cursos: " + registro.cursos.length + "\n" +
-          "Promedio todas asignaturas / 5: " + registro.promedioTodasAsignaturas + "\n" +
-          "Promedio total / 100: " + registro.promedioTotal100
-        );
-      } catch (error) {
-        console.error(error);
-        log("Error:\n" + error.message);
-      }
-    }
-
-    document.getElementById("btnLeerExcel").addEventListener("click", leerExcel);
-
-    document.getElementById("docenteSelect").addEventListener("change", function () {
-      const docente = this.value;
-      fillCarreraSelect(docente);
-      log(docente ? `Docente seleccionado: ${docente}\nSeleccione la carrera.` : "Seleccione un docente.");
-    });
-
-    document.getElementById("carreraSelect").addEventListener("change", function () {
-      const registro = getRegistroSeleccionado();
-      document.getElementById("btnProcesar").disabled = !registro;
-
-      if (registro) {
-        log(
-          "Selección lista.\n\n" +
-          "Docente: " + registro.docente + "\n" +
-          "Carrera: " + registro.carrera + "\n" +
-          "Cursos encontrados: " + registro.cursos.length
-        );
+        saveAs(blob, "Informe_" + reg.docente.replace(/[\\/:*?"<>|]+/g, "_") + ".docx");
+        log("Documento generado correctamente.");
+      } catch (e) {
+        log("Error:\n" + e.message);
       }
     });
-
-    document.getElementById("btnProcesar").addEventListener("click", procesarWord);
   </script>
-
 </body>
 </html>
