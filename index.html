@@ -2,97 +2,96 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generador UIDE - Test Final</title>
+    <title>UIDE - Generador Final</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
     <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #001a33; color: white; text-align: center; padding: 20px; }
-        .card { background: white; color: #333; padding: 20px; border-radius: 10px; display: inline-block; width: 450px; text-align: left; }
-        input, select, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; }
-        button { background: #003366; color: white; font-weight: bold; cursor: pointer; border: none; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding: 50px; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 450px; }
+        h2 { color: #003366; border-bottom: 2px solid #003366; padding-bottom: 10px; }
+        .step { margin: 20px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; font-size: 14px; border-radius: 5px; }
+        button { background: #d4af37; color: #001a33; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #b8962d; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h3 style="text-align:center">Panel de Control</h3>
-    <label>1. Seleccionar Excel:</label>
-    <input type="file" id="excel">
-    
-    <label>2. Seleccionar Word:</label>
-    <input type="file" id="word">
-
-    <div id="paso3" style="display:none">
-        <label>3. Carrera:</label>
-        <select id="selC" onchange="cambioCarrera()"></select>
-        <label>4. Docente:</label>
-        <select id="selD"></select>
-        <button onclick="generar()">GENERAR AHORA</button>
+<div class="container">
+    <h2>Generador UIDE</h2>
+    <div class="step">
+        <label>1. Cargar Excel:</label><input type="file" id="e" accept=".xlsx" style="width:100%">
+    </div>
+    <div class="step">
+        <label>2. Cargar Word (Plantilla):</label><input type="file" id="w" accept=".docx" style="width:100%">
+    </div>
+    <div id="ready" style="display:none">
+        <label>Carrera:</label><select id="selC" onchange="updateD()"></select>
+        <label>Docente:</label><select id="selD"></select>
+        <button onclick="save()">GENERAR DOCUMENTO LLENO</button>
     </div>
 </div>
 
 <script>
-let excelJSON = [];
-let wordRaw = null;
+let rows = [];
+let zipContent = null;
 
-// Lector de Excel
-document.getElementById('excel').onchange = function(e) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
-        const nombreHoja = wb.SheetNames.includes("BD") ? "BD" : wb.SheetNames[0];
-        excelJSON = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja]);
-        
-        const carreras = [...new Set(excelJSON.map(x => x.Escuela).filter(Boolean))].sort();
-        document.getElementById('selC').innerHTML = carreras.map(c => `<option value="${c}">${c}</option>`).join('');
-        cambioCarrera();
-        mostrar();
+document.getElementById('e').onchange = function(evt) {
+    const r = new FileReader();
+    r.onload = (e) => {
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+        const ws = wb.Sheets["BD"] || wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws);
+        const cats = [...new Set(rows.map(r => r.Escuela).filter(Boolean))].sort();
+        document.getElementById('selC').innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        updateD();
+        check();
     };
-    reader.readAsArrayBuffer(e.target.files[0]);
+    r.readAsArrayBuffer(evt.target.files[0]);
 };
 
-// Lector de Word
-document.getElementById('word').onchange = function(e) {
-    const reader = new FileReader();
-    reader.onload = (ev) => { wordRaw = ev.target.result; mostrar(); };
-    reader.readAsArrayBuffer(e.target.files[0]);
+document.getElementById('w').onchange = function(evt) {
+    const r = new FileReader();
+    r.onload = (e) => { zipContent = e.target.result; check(); };
+    r.readAsArrayBuffer(evt.target.files[0]);
 };
 
-function mostrar() { if(excelJSON.length > 0 && wordRaw) document.getElementById('paso3').style.display = 'block'; }
+function check() { if(rows.length && zipContent) document.getElementById('ready').style.display='block'; }
 
-function cambioCarrera() {
+function updateD() {
     const c = document.getElementById('selC').value;
-    const filtrados = excelJSON.filter(x => x.Escuela === c).map(x => x.Docente).sort();
-    document.getElementById('selD').innerHTML = filtrados.map(d => `<option value="${d}">${d}</option>`).join('');
+    const docs = rows.filter(r => r.Escuela === c).map(r => r.Docente).sort();
+    document.getElementById('selD').innerHTML = docs.map(d => `<option value="${d}">${d}</option>`).join('');
 }
 
-function generar() {
-    const dName = document.getElementById('selD').value;
-    const fila = excelJSON.find(f => f.Docente === dName);
-    const notaBase100 = (parseFloat(fila.Promedio) * 20).toFixed(2);
-
-    // ESTA ALERTA TE CONFIRMA SI EL CÓDIGO TIENE LOS DATOS
-    alert(`Enlazando a ${dName}\nNota calculada: ${notaBase100}\n\nSi el Word sale vacío, revisa que tengas las llaves {{ }} en el documento.`);
+function save() {
+    const name = document.getElementById('selD').value;
+    const data = rows.find(r => r.Docente === name);
+    const score = (parseFloat(data.Promedio) * 20).toFixed(2);
 
     try {
-        const zip = new PizZip(wordRaw);
-        const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-
-        doc.render({
-            docente: fila.Docente,
-            carrera: fila.Escuela,
-            ev100: notaBase100,
-            total100: notaBase100,
-            escala: notaBase100 >= 70 ? "Muy buena" : "Regular"
+        const zip = new PizZip(zipContent);
+        // El parser "delimiters" fuerza al programa a buscar las llaves incluso si hay basura oculta
+        const doc = new window.docxtemplater(zip, { 
+            paragraphLoop: true, 
+            linebreaks: true
         });
 
+        doc.setData({
+            docente: data.Docente,
+            carrera: data.Escuela,
+            ev100: score,
+            total100: score,
+            escala: score >= 85 ? "Excelente" : (score >= 70 ? "Muy buena" : "Regular")
+        });
+
+        doc.render();
         const out = doc.getZip().generate({type: "blob"});
-        saveAs(out, `Informe_Final_${dName}.docx`);
-    } catch (err) {
-        console.error(err);
-        alert("Error técnico al procesar el Word.");
+        saveAs(out, `Resultado_${name}.docx`);
+    } catch (e) {
+        alert("Error: Revisa que tu Word tenga las etiquetas {{docente}} y {{ev100}} correctamente escritas.");
     }
 }
 </script>
