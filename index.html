@@ -1,150 +1,272 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Generador UIDE Pro</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.2/docxtemplater.js"></script>
-    <script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #001a33; color: #333; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; padding: 30px; border-radius: 15px; width: 100%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { color: #003366; text-align: center; border-bottom: 3px solid #b8962d; padding-bottom: 10px; }
-        .step { background: #f4f7f9; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ddd; }
-        label { font-weight: bold; color: #003366; display: block; margin-bottom: 5px; }
-        select, button, input { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; }
-        button { background: #b8962d; color: white; border: none; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 15px; }
-        button:hover { background: #9a7d25; }
-        .success { color: green; font-size: 12px; margin-top: 5px; display: none; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Llenar Word con datos de Excel</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.7/pizzip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+    .box {
+      border: 1px solid #ccc;
+      padding: 18px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-weight: bold;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 8px;
+    }
+    button {
+      margin-top: 18px;
+      padding: 12px 18px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f7f7f7;
+      padding: 12px;
+      border-radius: 6px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
 <body>
+  <h1>Llenar tabla 1 del Word con datos del Excel</h1>
 
-<div class="card">
-    <h2>Generador UIDE</h2>
-    
-    <div class="step">
-        <label>1. Archivo Excel (Datos):</label>
-        <input type="file" id="inputExcel" accept=".xlsx">
-        <div id="xlStatus" class="success">✅ Excel cargado</div>
-    </div>
+  <div class="box">
+    <label for="excelFile">Excel de evaluación docente</label>
+    <input type="file" id="excelFile" accept=".xlsx,.xls" />
 
-    <div class="step">
-        <label>2. Plantilla Word (.docx):</label>
-        <input type="file" id="inputWord" accept=".docx">
-        <div id="wdStatus" class="success">✅ Word cargado</div>
-    </div>
+    <label for="wordFile">Plantilla Word</label>
+    <input type="file" id="wordFile" accept=".docx" />
 
-    <div id="formSection" style="display:none">
-        <div class="step">
-            <label>Carrera:</label>
-            <select id="selCarrera" onchange="actualizarDocentes()"></select>
-            <label style="margin-top:10px">Docente:</label>
-            <select id="selDocente"></select>
-        </div>
-        <button onclick="generarDocumento()">DESCARGAR INFORME LLENO</button>
-    </div>
-</div>
+    <button id="btnProcesar">Procesar y descargar Word</button>
+  </div>
 
-<script>
-let database = [];
-let wordFile = null;
+  <div class="box">
+    <strong>Regla aplicada</strong>
+    <pre>
+P1 = Dominio de la asignatura.
+P2 = Evaluación clara y retroalimentación objetiva.
+P3 = Utiliza metodologías prácticas...
+P4 = Es accesible y responde a mis preguntas...
+P5 = Incluye ejemplos internacionales...
+P6 = Es flexible, respeta las ideas...
+P7 = Comunica y cumple la planificación del sílabo.
+P8 = Manifiesta compromiso al cumplir con las normas...
+    </pre>
+  </div>
 
-// LECTURA DE EXCEL
-document.getElementById('inputExcel').addEventListener('change', function(e) {
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-        const data = new Uint8Array(ev.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        database = XLSX.utils.sheet_to_json(sheet);
-        
-        const carreras = [...new Set(database.map(x => x.Escuela).filter(Boolean))].sort();
-        const comboC = document.getElementById('selCarrera');
-        comboC.innerHTML = '<option value="">-- Seleccione Carrera --</option>' + 
-            carreras.map(c => `<option value="${c}">${c}</option>`).join('');
-        
-        document.getElementById('xlStatus').style.display = 'block';
-        verificarCarga();
+  <div class="box">
+    <strong>Estado</strong>
+    <pre id="log">Esperando archivos...</pre>
+  </div>
+
+  <script>
+    const log = (msg) => {
+      document.getElementById("log").textContent = msg;
     };
-    reader.readAsArrayBuffer(e.target.files[0]);
-});
 
-// LECTURA DE WORD (Evita el error de "Central Directory")
-document.getElementById('inputWord').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-        wordFile = ev.target.result;
-        document.getElementById('wdStatus').style.display = 'block';
-        verificarCarga();
+    const round2 = (n) => {
+      const num = Number(n);
+      if (Number.isNaN(num)) return "";
+      return num.toFixed(2).replace(".", ",");
     };
-    reader.readAsArrayBuffer(file);
-});
 
-function verificarCarga() {
-    if(database.length > 0 && wordFile) {
-        document.getElementById('formSection').style.display = 'block';
+    const escapeXml = (value) => {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    };
+
+    const readFileAsArrayBuffer = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    };
+
+    function extraerCursosDesdeExcel(workbook) {
+      const sheetName = "Eval docente individual";
+      const ws = workbook.Sheets[sheetName];
+
+      if (!ws) {
+        throw new Error(`No existe la hoja "${sheetName}".`);
+      }
+
+      const rows = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        raw: true,
+        defval: ""
+      });
+
+      const cursos = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+
+        if (row[2] === "Curso:" && typeof row[3] === "string" && row[3].trim() !== "") {
+          const nombreCurso = row[3].trim();
+
+          const bloque = [];
+          for (let j = i + 2; j <= i + 9; j++) {
+            const r = rows[j] || [];
+            const pregunta = String(r[2] || "").trim();
+            const notaCursoElegido = r[15];
+
+            if (!pregunta) continue;
+
+            bloque.push({
+              pregunta,
+              valor: Number(notaCursoElegido)
+            });
+          }
+
+          if (bloque.length >= 8) {
+            const p = bloque.slice(0, 8).map(x => x.valor);
+            const promedio = p.reduce((a, b) => a + b, 0) / p.length;
+
+            cursos.push({
+              nombre: nombreCurso,
+              p1: round2(p[0]),
+              p2: round2(p[1]),
+              p3: round2(p[2]),
+              p4: round2(p[3]),
+              p5: round2(p[4]),
+              p6: round2(p[5]),
+              p7: round2(p[6]),
+              p8: round2(p[7]),
+              promedio: round2(promedio)
+            });
+          }
+        }
+      }
+
+      if (!cursos.length) {
+        throw new Error("No se encontraron bloques de cursos en la hoja 'Eval docente individual'.");
+      }
+
+      return cursos;
     }
-}
 
-function actualizarDocentes() {
-    const carrera = document.getElementById('selCarrera').value;
-    const docentes = [...new Set(database.filter(x => x.Escuela === carrera).map(x => x.Docente))].sort();
-    const comboD = document.getElementById('selDocente');
-    comboD.innerHTML = docentes.map(d => `<option value="${d}">${d}</option>`).join('');
-}
+    function reemplazarFilaTablaEnWord(xml, cursos) {
+      const rowRegex = /<w:tr[\s\S]*?<\/w:tr>/g;
+      const rows = xml.match(rowRegex);
 
-function generarDocumento() {
-    const nombreDocente = document.getElementById('selDocente').value;
-    const carrera = document.getElementById('selCarrera').value;
-    
-    // Filtrar materias del docente seleccionado
-    const materiasDocente = database.filter(x => x.Docente === nombreDocente);
+      if (!rows || !rows.length) {
+        throw new Error("No fue posible leer las filas de la tabla en document.xml.");
+      }
 
-    const listaParaWord = materiasDocente.map(m => ({
-        n: m.Asignatura || m.Curso || "S/N",
-        p1: Number(m.P1 || 0).toFixed(2),
-        p2: Number(m.P2 || 0).toFixed(2),
-        p3: Number(m.P3 || 0).toFixed(2),
-        p4: Number(m.P4 || 0).toFixed(2),
-        p5: Number(m.P5 || 0).toFixed(2),
-        p6: Number(m.P6 || 0).toFixed(2),
-        p7: Number(m.P7 || 0).toFixed(2),
-        p8: Number(m.P8 || 0).toFixed(2),
-        pr: Number(m.Promedio || 0).toFixed(2)
-    }));
+      const templateRow = rows.find(r =>
+        r.includes("{{nombre}}") &&
+        r.includes("{{p1}}") &&
+        r.includes("{{p8}}") &&
+        r.includes("{{promedio}}")
+      );
 
-    // Cálculo de promedios finales
-    const totalPromedios = listaParaWord.reduce((acc, curr) => acc + parseFloat(curr.pr), 0);
-    const promGeneral = (totalPromedios / listaParaWord.length).toFixed(2);
-    const nota100 = (promGeneral * 20).toFixed(2);
+      if (!templateRow) {
+        throw new Error("No se encontró la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
+      }
 
-    try {
-        const zip = new PizZip(wordFile);
-        const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+      const filasGeneradas = cursos.map(curso => {
+        return templateRow
+          .replaceAll("{{nombre}}", escapeXml(curso.nombre))
+          .replaceAll("{{p1}}", escapeXml(curso.p1))
+          .replaceAll("{{p2}}", escapeXml(curso.p2))
+          .replaceAll("{{p3}}", escapeXml(curso.p3))
+          .replaceAll("{{p4}}", escapeXml(curso.p4))
+          .replaceAll("{{p5}}", escapeXml(curso.p5))
+          .replaceAll("{{p6}}", escapeXml(curso.p6))
+          .replaceAll("{{p7}}", escapeXml(curso.p7))
+          .replaceAll("{{p8}}", escapeXml(curso.p8))
+          .replaceAll("{{promedio}}", escapeXml(curso.promedio));
+      }).join("");
 
-        doc.render({
-            docente: nombreDocente,
-            carrera: carrera,
-            asig: listaParaWord, // Esto llena la tabla dinámica
-            ev100: nota100,
-            total100: nota100,
-            escala: nota100 >= 85 ? "Excelente" : (nota100 >= 70 ? "Muy buena" : "Regular")
+      const firstIndex = xml.indexOf(templateRow);
+      const lastIndex = xml.lastIndexOf(templateRow);
+
+      if (firstIndex === -1 || lastIndex === -1) {
+        throw new Error("No fue posible ubicar el bloque repetido de filas plantilla.");
+      }
+
+      const before = xml.substring(0, firstIndex);
+      const after = xml.substring(lastIndex + templateRow.length);
+
+      return before + filasGeneradas + after;
+    }
+
+    document.getElementById("btnProcesar").addEventListener("click", async () => {
+      try {
+        const excelFile = document.getElementById("excelFile").files[0];
+        const wordFile = document.getElementById("wordFile").files[0];
+
+        if (!excelFile) {
+          throw new Error("Debe seleccionar el archivo Excel.");
+        }
+        if (!wordFile) {
+          throw new Error("Debe seleccionar el archivo Word.");
+        }
+
+        log("Leyendo Excel...");
+        const excelBuffer = await readFileAsArrayBuffer(excelFile);
+        const workbook = XLSX.read(excelBuffer, { type: "array" });
+
+        const cursos = extraerCursosDesdeExcel(workbook);
+
+        log(
+          "Cursos detectados:\n\n" +
+          cursos.map((c, i) =>
+            `${i + 1}. ${c.nombre}\n` +
+            `   P1=${c.p1} | P2=${c.p2} | P3=${c.p3} | P4=${c.p4} | P5=${c.p5} | P6=${c.p6} | P7=${c.p7} | P8=${c.p8} | Prom=${c.promedio}`
+          ).join("\n\n")
+        );
+
+        log("Leyendo Word...");
+        const wordBuffer = await readFileAsArrayBuffer(wordFile);
+        const zip = new PizZip(wordBuffer);
+
+        let documentXml = zip.file("word/document.xml").asText();
+
+        documentXml = reemplazarFilaTablaEnWord(documentXml, cursos);
+
+        zip.file("word/document.xml", documentXml);
+
+        const out = zip.generate({
+          type: "blob",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         });
 
-        const out = doc.getZip().generate({
-            type: "blob",
-            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        });
-        saveAs(out, `Informe_UIDE_${nombreDocente}.docx`);
-        
-    } catch (error) {
+        saveAs(out, "Informe_Evaluacion_Docente_Llenado.docx");
+
+        log("Proceso completado correctamente. Se descargó el Word lleno.");
+      } catch (error) {
         console.error(error);
-        alert("Error al procesar el Word. Asegúrate de que no esté abierto en otro programa y que las etiquetas sean correctas.");
-    }
-}
-</script>
+        log("Error:\n" + error.message);
+      }
+    });
+  </script>
 </body>
 </html>
