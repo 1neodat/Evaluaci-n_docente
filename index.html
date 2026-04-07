@@ -68,12 +68,12 @@
     <pre>
 P1 = Dominio de la asignatura.
 P2 = Evaluación clara y retroalimentación objetiva.
-P3 = Utiliza metodologías prácticas...
-P4 = Es accesible y responde a mis preguntas...
-P5 = Incluye ejemplos internacionales...
-P6 = Es flexible, respeta las ideas...
+P3 = Utiliza metodologías prácticas.
+P4 = Es accesible y responde a mis preguntas.
+P5 = Incluye ejemplos internacionales.
+P6 = Es flexible, respeta las ideas.
 P7 = Comunica y cumple la planificación del sílabo.
-P8 = Manifiesta compromiso al cumplir con las normas...
+P8 = Manifiesta compromiso al cumplir con las normas.
     </pre>
   </div>
 
@@ -191,6 +191,13 @@ P8 = Manifiesta compromiso al cumplir con las normas...
         throw new Error("No se encontró la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
       }
 
+      const filasPlantilla = rows.filter(r =>
+        r.includes("{{nombre}}") &&
+        r.includes("{{p1}}") &&
+        r.includes("{{p8}}") &&
+        r.includes("{{promedio}}")
+      );
+
       const filasGeneradas = cursos.map(curso => {
         return templateRow
           .replaceAll("{{nombre}}", escapeXml(curso.nombre))
@@ -205,27 +212,40 @@ P8 = Manifiesta compromiso al cumplir con las normas...
           .replaceAll("{{promedio}}", escapeXml(curso.promedio));
       }).join("");
 
-      const firstIndex = xml.indexOf(templateRow);
-      const lastIndex = xml.lastIndexOf(templateRow);
+      let nuevoXml = xml;
 
-      if (firstIndex === -1 || lastIndex === -1) {
-        throw new Error("No fue posible ubicar el bloque repetido de filas plantilla.");
-      }
+      filasPlantilla.forEach((fila, index) => {
+        if (index === 0) {
+          nuevoXml = nuevoXml.replace(fila, filasGeneradas);
+        } else {
+          nuevoXml = nuevoXml.replace(fila, "");
+        }
+      });
 
-      const before = xml.substring(0, firstIndex);
-      const after = xml.substring(lastIndex + templateRow.length);
-
-      return before + filasGeneradas + after;
+      return nuevoXml;
     }
 
     document.getElementById("btnProcesar").addEventListener("click", async () => {
       try {
+        if (typeof XLSX === "undefined") {
+          throw new Error("La librería XLSX no se cargó.");
+        }
+
+        if (typeof PizZip === "undefined") {
+          throw new Error("La librería PizZip no se cargó. Abra el HTML con internet o descargue la librería localmente.");
+        }
+
+        if (typeof saveAs === "undefined") {
+          throw new Error("La librería FileSaver no se cargó.");
+        }
+
         const excelFile = document.getElementById("excelFile").files[0];
         const wordFile = document.getElementById("wordFile").files[0];
 
         if (!excelFile) {
           throw new Error("Debe seleccionar el archivo Excel.");
         }
+
         if (!wordFile) {
           throw new Error("Debe seleccionar el archivo Word.");
         }
@@ -233,21 +253,12 @@ P8 = Manifiesta compromiso al cumplir con las normas...
         log("Leyendo Excel...");
         const excelBuffer = await readFileAsArrayBuffer(excelFile);
         const workbook = XLSX.read(excelBuffer, { type: "array" });
-
         const cursos = extraerCursosDesdeExcel(workbook);
-
-        log(
-          "Cursos detectados:\n\n" +
-          cursos.map((c, i) =>
-            `${i + 1}. ${c.nombre}\n` +
-            `   P1=${c.p1} | P2=${c.p2} | P3=${c.p3} | P4=${c.p4} | P5=${c.p5} | P6=${c.p6} | P7=${c.p7} | P8=${c.p8} | Prom=${c.promedio}`
-          ).join("\n\n")
-        );
 
         log("Leyendo Word...");
         const wordBuffer = await readFileAsArrayBuffer(wordFile);
-        const zip = new PizZip(wordBuffer);
 
+        const zip = new PizZip(wordBuffer);
         let documentXml = zip.file("word/document.xml").asText();
 
         documentXml = reemplazarFilaTablaEnWord(documentXml, cursos);
@@ -260,8 +271,7 @@ P8 = Manifiesta compromiso al cumplir con las normas...
         });
 
         saveAs(out, "Informe_Evaluacion_Docente_Llenado.docx");
-
-        log("Proceso completado correctamente. Se descargó el Word lleno.");
+        log("Proceso completado correctamente.");
       } catch (error) {
         console.error(error);
         log("Error:\n" + error.message);
