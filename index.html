@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Llenar Word con datos de Excel</title>
+  <title>Generar informe docente</title>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.7/pizzip.min.js"></script>
@@ -12,46 +12,48 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 900px;
-      margin: 40px auto;
+      max-width: 980px;
+      margin: 30px auto;
       padding: 0 16px;
     }
     h1 {
-      font-size: 22px;
+      font-size: 24px;
       margin-bottom: 20px;
     }
     .box {
       border: 1px solid #ccc;
-      padding: 18px;
       border-radius: 8px;
-      margin-bottom: 20px;
+      padding: 16px;
+      margin-bottom: 18px;
     }
     label {
       display: block;
-      margin: 12px 0 6px;
       font-weight: bold;
+      margin: 12px 0 6px;
     }
-    input[type="file"] {
+    input[type="file"],
+    input[type="text"] {
       width: 100%;
       padding: 8px;
+      box-sizing: border-box;
     }
     button {
-      margin-top: 18px;
+      margin-top: 16px;
       padding: 12px 18px;
-      font-size: 15px;
       cursor: pointer;
+      font-size: 15px;
     }
     pre {
       background: #f7f7f7;
       padding: 12px;
       border-radius: 6px;
-      overflow: auto;
       white-space: pre-wrap;
+      overflow: auto;
     }
   </style>
 </head>
 <body>
-  <h1>Llenar tabla 1 del Word con datos del Excel</h1>
+  <h1>Llenar todos los campos {{ }} del Word con datos del Excel</h1>
 
   <div class="box">
     <label for="excelFile">Excel de evaluación docente</label>
@@ -60,20 +62,27 @@
     <label for="wordFile">Plantilla Word</label>
     <input type="file" id="wordFile" accept=".docx" />
 
+    <label for="docenteInput">Docente</label>
+    <input type="text" id="docenteInput" placeholder="Se llenará automáticamente desde el Excel" />
+
+    <label for="carreraInput">Carrera</label>
+    <input type="text" id="carreraInput" placeholder="Se llenará automáticamente desde el Excel" />
+
+    <button id="btnLeerExcel">Leer Excel</button>
     <button id="btnProcesar">Procesar y descargar Word</button>
   </div>
 
   <div class="box">
-    <strong>Regla aplicada</strong>
+    <strong>Regla P1 a P8</strong>
     <pre>
 P1 = Dominio de la asignatura.
 P2 = Evaluación clara y retroalimentación objetiva.
-P3 = Utiliza metodologías prácticas.
-P4 = Es accesible y responde a mis preguntas.
-P5 = Incluye ejemplos internacionales.
-P6 = Es flexible, respeta las ideas.
+P3 = Utiliza metodologías prácticas (proyectos, casos) y herramientas tecnológicas que favorecen mi formación profesional.
+P4 = Es accesible y responde a mis preguntas con claridad, coherencia y disposición.
+P5 = Incluye ejemplos internacionales (material académico con alcance global, contenido ASU) con diferentes puntos de vista culturales.
+P6 = Es flexible, respeta las ideas y la diversidad de los estudiantes.
 P7 = Comunica y cumple la planificación del sílabo.
-P8 = Manifiesta compromiso al cumplir con las normas.
+P8 = Manifiesta compromiso al cumplir con las normas y plazos académicos de la UIDE.
     </pre>
   </div>
 
@@ -83,33 +92,39 @@ P8 = Manifiesta compromiso al cumplir con las normas.
   </div>
 
   <script>
-    const log = (msg) => {
-      document.getElementById("log").textContent = msg;
-    };
+    let cacheDatosExcel = null;
 
-    const round2 = (n) => {
+    function log(msg) {
+      document.getElementById("log").textContent = msg;
+    }
+
+    function readFileAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function round2(n) {
       const num = Number(n);
       if (Number.isNaN(num)) return "";
       return num.toFixed(2).replace(".", ",");
-    };
+    }
 
-    const escapeXml = (value) => {
+    function escapeXml(value) {
       return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
-    };
+    }
 
-    const readFileAsArrayBuffer = (file) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-      });
-    };
+    function obtenerTexto(row, index) {
+      return String(row?.[index] ?? "").trim();
+    }
 
-    function extraerCursosDesdeExcel(workbook) {
+    function extraerDatosDesdeExcel(workbook) {
       const sheetName = "Eval docente individual";
       const ws = workbook.Sheets[sheetName];
 
@@ -123,42 +138,63 @@ P8 = Manifiesta compromiso al cumplir con las normas.
         defval: ""
       });
 
+      let docente = "";
+      let carrera = "";
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+
+        if (obtenerTexto(row, 2) === "Docente:") {
+          docente = obtenerTexto(row, 3);
+        }
+
+        if (obtenerTexto(row, 2) === "Escuela:") {
+          carrera = obtenerTexto(row, 3);
+        }
+      }
+
+      if (!docente) {
+        throw new Error("No se pudo extraer el nombre del docente desde el Excel.");
+      }
+
+      if (!carrera) {
+        throw new Error("No se pudo extraer la carrera desde el Excel.");
+      }
+
       const cursos = [];
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
 
-        if (row[2] === "Curso:" && typeof row[3] === "string" && row[3].trim() !== "") {
-          const nombreCurso = row[3].trim();
+        if (obtenerTexto(row, 2) === "Curso:" && obtenerTexto(row, 3) !== "") {
+          const nombreCurso = obtenerTexto(row, 3);
 
-          const bloque = [];
+          const p = [];
+
           for (let j = i + 2; j <= i + 9; j++) {
             const r = rows[j] || [];
-            const pregunta = String(r[2] || "").trim();
+            const pregunta = obtenerTexto(r, 2);
             const notaCursoElegido = r[15];
 
             if (!pregunta) continue;
 
-            bloque.push({
-              pregunta,
-              valor: Number(notaCursoElegido)
-            });
+            p.push(Number(notaCursoElegido));
           }
 
-          if (bloque.length >= 8) {
-            const p = bloque.slice(0, 8).map(x => x.valor);
-            const promedio = p.reduce((a, b) => a + b, 0) / p.length;
+          if (p.length >= 8) {
+            const valores = p.slice(0, 8);
+            const promedio = valores.reduce((a, b) => a + b, 0) / valores.length;
 
             cursos.push({
               nombre: nombreCurso,
-              p1: round2(p[0]),
-              p2: round2(p[1]),
-              p3: round2(p[2]),
-              p4: round2(p[3]),
-              p5: round2(p[4]),
-              p6: round2(p[5]),
-              p7: round2(p[6]),
-              p8: round2(p[7]),
+              p1: round2(valores[0]),
+              p2: round2(valores[1]),
+              p3: round2(valores[2]),
+              p4: round2(valores[3]),
+              p5: round2(valores[4]),
+              p6: round2(valores[5]),
+              p7: round2(valores[6]),
+              p8: round2(valores[7]),
               promedio: round2(promedio)
             });
           }
@@ -166,29 +202,33 @@ P8 = Manifiesta compromiso al cumplir con las normas.
       }
 
       if (!cursos.length) {
-        throw new Error("No se encontraron bloques de cursos en la hoja 'Eval docente individual'.");
+        throw new Error("No se encontraron cursos para llenar la tabla del Word.");
       }
 
-      return cursos;
+      return {
+        docente,
+        carrera,
+        cursos
+      };
     }
 
-    function reemplazarFilaTablaEnWord(xml, cursos) {
+    function reemplazarTextoSimple(xml, mapa) {
+      let salida = xml;
+
+      for (const [clave, valor] of Object.entries(mapa)) {
+        const buscado = `{{${clave}}}`;
+        salida = salida.split(buscado).join(escapeXml(valor));
+      }
+
+      return salida;
+    }
+
+    function reemplazarFilasCursos(xml, cursos) {
       const rowRegex = /<w:tr[\s\S]*?<\/w:tr>/g;
       const rows = xml.match(rowRegex);
 
       if (!rows || !rows.length) {
-        throw new Error("No fue posible leer las filas de la tabla en document.xml.");
-      }
-
-      const templateRow = rows.find(r =>
-        r.includes("{{nombre}}") &&
-        r.includes("{{p1}}") &&
-        r.includes("{{p8}}") &&
-        r.includes("{{promedio}}")
-      );
-
-      if (!templateRow) {
-        throw new Error("No se encontró la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
+        throw new Error("No se pudieron leer las filas de la tabla del Word.");
       }
 
       const filasPlantilla = rows.filter(r =>
@@ -198,18 +238,24 @@ P8 = Manifiesta compromiso al cumplir con las normas.
         r.includes("{{promedio}}")
       );
 
+      if (!filasPlantilla.length) {
+        throw new Error("No se encontró la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
+      }
+
+      const templateRow = filasPlantilla[0];
+
       const filasGeneradas = cursos.map(curso => {
         return templateRow
-          .replaceAll("{{nombre}}", escapeXml(curso.nombre))
-          .replaceAll("{{p1}}", escapeXml(curso.p1))
-          .replaceAll("{{p2}}", escapeXml(curso.p2))
-          .replaceAll("{{p3}}", escapeXml(curso.p3))
-          .replaceAll("{{p4}}", escapeXml(curso.p4))
-          .replaceAll("{{p5}}", escapeXml(curso.p5))
-          .replaceAll("{{p6}}", escapeXml(curso.p6))
-          .replaceAll("{{p7}}", escapeXml(curso.p7))
-          .replaceAll("{{p8}}", escapeXml(curso.p8))
-          .replaceAll("{{promedio}}", escapeXml(curso.promedio));
+          .split("{{nombre}}").join(escapeXml(curso.nombre))
+          .split("{{p1}}").join(escapeXml(curso.p1))
+          .split("{{p2}}").join(escapeXml(curso.p2))
+          .split("{{p3}}").join(escapeXml(curso.p3))
+          .split("{{p4}}").join(escapeXml(curso.p4))
+          .split("{{p5}}").join(escapeXml(curso.p5))
+          .split("{{p6}}").join(escapeXml(curso.p6))
+          .split("{{p7}}").join(escapeXml(curso.p7))
+          .split("{{p8}}").join(escapeXml(curso.p8))
+          .split("{{promedio}}").join(escapeXml(curso.promedio));
       }).join("");
 
       let nuevoXml = xml;
@@ -225,53 +271,122 @@ P8 = Manifiesta compromiso al cumplir con las normas.
       return nuevoXml;
     }
 
+    async function leerExcel() {
+      if (typeof XLSX === "undefined") {
+        throw new Error("La librería XLSX no se cargó.");
+      }
+
+      const excelFile = document.getElementById("excelFile").files[0];
+
+      if (!excelFile) {
+        throw new Error("Debe seleccionar el archivo Excel.");
+      }
+
+      log("Leyendo Excel...");
+      const excelBuffer = await readFileAsArrayBuffer(excelFile);
+      const workbook = XLSX.read(excelBuffer, { type: "array" });
+
+      const datos = extraerDatosDesdeExcel(workbook);
+      cacheDatosExcel = datos;
+
+      document.getElementById("docenteInput").value = datos.docente;
+      document.getElementById("carreraInput").value = datos.carrera;
+
+      log(
+        "Excel leído correctamente.\n\n" +
+        "Docente: " + datos.docente + "\n" +
+        "Carrera: " + datos.carrera + "\n" +
+        "Cursos detectados: " + datos.cursos.length + "\n\n" +
+        datos.cursos.map((c, i) =>
+          `${i + 1}. ${c.nombre}\n` +
+          `   P1=${c.p1} | P2=${c.p2} | P3=${c.p3} | P4=${c.p4} | P5=${c.p5} | P6=${c.p6} | P7=${c.p7} | P8=${c.p8} | PROM=${c.promedio}`
+        ).join("\n\n")
+      );
+    }
+
+    async function procesarWord() {
+      if (typeof XLSX === "undefined") {
+        throw new Error("La librería XLSX no se cargó.");
+      }
+
+      if (typeof PizZip === "undefined") {
+        throw new Error("La librería PizZip no se cargó.");
+      }
+
+      if (typeof saveAs === "undefined") {
+        throw new Error("La librería FileSaver no se cargó.");
+      }
+
+      const wordFile = document.getElementById("wordFile").files[0];
+
+      if (!wordFile) {
+        throw new Error("Debe seleccionar la plantilla Word.");
+      }
+
+      if (!cacheDatosExcel) {
+        await leerExcel();
+      }
+
+      const docenteManual = document.getElementById("docenteInput").value.trim();
+      const carreraManual = document.getElementById("carreraInput").value.trim();
+
+      if (!docenteManual) {
+        throw new Error("El campo Docente está vacío.");
+      }
+
+      if (!carreraManual) {
+        throw new Error("El campo Carrera está vacío.");
+      }
+
+      const datos = {
+        ...cacheDatosExcel,
+        docente: docenteManual,
+        carrera: carreraManual
+      };
+
+      log("Leyendo Word...");
+      const wordBuffer = await readFileAsArrayBuffer(wordFile);
+
+      const zip = new PizZip(wordBuffer);
+      let documentXml = zip.file("word/document.xml").asText();
+
+      documentXml = reemplazarFilasCursos(documentXml, datos.cursos);
+
+      documentXml = reemplazarTextoSimple(documentXml, {
+        docente: datos.docente,
+        carrera: datos.carrera
+      });
+
+      zip.file("word/document.xml", documentXml);
+
+      const out = zip.generate({
+        type: "blob",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      });
+
+      saveAs(out, "Informe_Evaluacion_Docente_Llenado.docx");
+
+      log(
+        "Proceso completado correctamente.\n\n" +
+        "Se reemplazaron estos campos del Word:\n" +
+        "{{docente}} -> " + datos.docente + "\n" +
+        "{{carrera}} -> " + datos.carrera + "\n" +
+        "{{nombre}}, {{p1}}...{{p8}}, {{promedio}} -> tabla de cursos"
+      );
+    }
+
+    document.getElementById("btnLeerExcel").addEventListener("click", async () => {
+      try {
+        await leerExcel();
+      } catch (error) {
+        console.error(error);
+        log("Error:\n" + error.message);
+      }
+    });
+
     document.getElementById("btnProcesar").addEventListener("click", async () => {
       try {
-        if (typeof XLSX === "undefined") {
-          throw new Error("La librería XLSX no se cargó.");
-        }
-
-        if (typeof PizZip === "undefined") {
-          throw new Error("La librería PizZip no se cargó. Abra el HTML con internet o descargue la librería localmente.");
-        }
-
-        if (typeof saveAs === "undefined") {
-          throw new Error("La librería FileSaver no se cargó.");
-        }
-
-        const excelFile = document.getElementById("excelFile").files[0];
-        const wordFile = document.getElementById("wordFile").files[0];
-
-        if (!excelFile) {
-          throw new Error("Debe seleccionar el archivo Excel.");
-        }
-
-        if (!wordFile) {
-          throw new Error("Debe seleccionar el archivo Word.");
-        }
-
-        log("Leyendo Excel...");
-        const excelBuffer = await readFileAsArrayBuffer(excelFile);
-        const workbook = XLSX.read(excelBuffer, { type: "array" });
-        const cursos = extraerCursosDesdeExcel(workbook);
-
-        log("Leyendo Word...");
-        const wordBuffer = await readFileAsArrayBuffer(wordFile);
-
-        const zip = new PizZip(wordBuffer);
-        let documentXml = zip.file("word/document.xml").asText();
-
-        documentXml = reemplazarFilaTablaEnWord(documentXml, cursos);
-
-        zip.file("word/document.xml", documentXml);
-
-        const out = zip.generate({
-          type: "blob",
-          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        });
-
-        saveAs(out, "Informe_Evaluacion_Docente_Llenado.docx");
-        log("Proceso completado correctamente.");
+        await procesarWord();
       } catch (error) {
         console.error(error);
         log("Error:\n" + error.message);
