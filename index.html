@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Base completa sin pérdida</title>
+  <title>Base híbrida filtrable sin pérdida</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
@@ -16,12 +16,16 @@
     th, td { border: 1px solid #bbb; padding: 6px; text-align: left; vertical-align: top; }
     th { background: #efefef; }
     .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+    .grid input, .grid select { width: 100%; padding: 8px; box-sizing: border-box; }
+    .small { font-size: 12px; color: #555; }
     pre { background: #111; color: #eee; padding: 12px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .section { margin-top: 18px; }
+    .badge { display:inline-block; padding:2px 8px; border:1px solid #ccc; margin-right:6px; font-size:12px; background:#fff; }
   </style>
 </head>
 <body>
-  <h1>Compilación completa sin pérdida de información</h1>
+  <h1>Base híbrida filtrable sin pérdida de información</h1>
 
   <div class="panel">
     <p>Cargue exactamente estos tres archivos:</p>
@@ -34,12 +38,63 @@
     <input type="file" id="files" multiple accept=".xlsx,.xls" />
     <br><br>
     <button onclick="procesar()">Procesar</button>
-    <button onclick="descargarJSON()">Descargar JSON completo</button>
-    <button onclick="descargarHTML()">Descargar HTML compilado</button>
+    <button onclick="descargarJSON()">Descargar JSON</button>
+    <button onclick="descargarHTML()">Descargar HTML</button>
     <div id="status"></div>
   </div>
 
   <div id="resumen"></div>
+
+  <div id="filtros" class="panel" style="display:none;">
+    <h2>Filtros</h2>
+    <div class="grid">
+      <div>
+        <label>Archivo</label>
+        <select id="f_archivo"><option value="">Todos</option></select>
+      </div>
+      <div>
+        <label>Hoja</label>
+        <select id="f_hoja"><option value="">Todas</option></select>
+      </div>
+      <div>
+        <label>Carrera</label>
+        <select id="f_carrera"><option value="">Todas</option></select>
+      </div>
+      <div>
+        <label>Docente</label>
+        <select id="f_docente"><option value="">Todos</option></select>
+      </div>
+      <div>
+        <label>Cédula</label>
+        <input id="f_cedula" type="text" />
+      </div>
+      <div>
+        <label>Materia / Curso</label>
+        <select id="f_curso"><option value="">Todos</option></select>
+      </div>
+      <div>
+        <label>Paralelo</label>
+        <input id="f_paralelo" type="text" />
+      </div>
+      <div>
+        <label>Pregunta</label>
+        <select id="f_pregunta"><option value="">Todas</option></select>
+      </div>
+      <div>
+        <label>Evaluación / Tipo</label>
+        <select id="f_evaluacion"><option value="">Todas</option></select>
+      </div>
+      <div>
+        <label>Texto libre</label>
+        <input id="f_texto" type="text" />
+      </div>
+    </div>
+    <br>
+    <button onclick="aplicarFiltros()">Aplicar filtros</button>
+    <button onclick="limpiarFiltros()">Limpiar filtros</button>
+    <div class="small">La búsqueda se hace sobre la capa indexada, pero cada resultado conserva referencia al origen crudo.</div>
+  </div>
+
   <div id="salida"></div>
 
   <script>
@@ -50,6 +105,7 @@
     ];
 
     let DB = null;
+    let FILTERED = [];
 
     function esc(v) {
       return String(v ?? "")
@@ -70,25 +126,55 @@
 
     function cleanText(v) {
       if (v === null || v === undefined) return "";
-      return String(v);
+      return String(v).replace(/\s+/g, " ").trim();
     }
 
-    function tableHTML(title, rows, limit = 50) {
-      if (!rows || !rows.length) {
-        return `<h3>${esc(title)}</h3><div class="meta">Sin registros</div>`;
+    function cleanNumber(v) {
+      if (v === null || v === undefined || v === "") return null;
+      if (typeof v === "number") return Number.isFinite(v) ? v : null;
+      let s = String(v).trim();
+      if (!s) return null;
+      s = s.replace(/%/g, "").replace(/\s/g, "");
+      s = s.replace(/\.(?=\d{3}(\D|$))/g, "");
+      s = s.replace(",", ".");
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function looksLikeCedula(v) {
+      const s = String(v ?? "").replace(/\D/g, "");
+      return s.length >= 8 && s.length <= 13 ? s : "";
+    }
+
+    function headerMap(row) {
+      const m = {};
+      row.forEach((h, i) => { m[norm(h)] = i; });
+      return m;
+    }
+
+    function findIndex(hmap, candidates) {
+      for (const c of candidates) {
+        const key = norm(c);
+        if (key in hmap) return hmap[key];
       }
-      const cols = Object.keys(rows[0]);
-      const body = rows.slice(0, limit).map(r =>
-        "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") + "</tr>"
-      ).join("");
-      return `
-        <h3>${esc(title)}</h3>
-        <div class="meta">Registros: ${rows.length}${rows.length > limit ? ` | Mostrando primeros ${limit}` : ""}</div>
-        <table>
-          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      `;
+      return -1;
+    }
+
+    function getVal(row, idx) {
+      if (idx < 0) return "";
+      return row[idx];
+    }
+
+    function asText(row, idx) {
+      return cleanText(getVal(row, idx));
+    }
+
+    function sheetToMatrix(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false, blankrows: true });
+    }
+
+    function makeId(prefix, ...parts) {
+      return prefix + "_" + parts.map(v => norm(v || "na").replace(/[^a-z0-9]+/g, "_")).join("_");
     }
 
     async function readWorkbook(file) {
@@ -103,63 +189,401 @@
       });
     }
 
-    function buildStructuredViews(db) {
-      const structured = {
-        files_summary: [],
-        sheets_summary: [],
-        possible_headers: [],
-        row_lengths: []
-      };
+    function pushUniqueOptions(selectId, values) {
+      const sel = document.getElementById(selectId);
+      sel.innerHTML = '<option value="">Todos</option>';
+      [...new Set(values.filter(Boolean).map(v => String(v)))].sort((a,b)=>a.localeCompare(b,'es')).forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+      });
+    }
 
-      for (const f of db.raw_files) {
-        structured.files_summary.push({
-          file_id: f.file_id,
-          file_name: f.file_name,
-          sheet_count: db.raw_sheets.filter(s => s.file_id === f.file_id).length
+    function tableHTML(title, rows, limit = 100) {
+      if (!rows.length) return `<h3>${esc(title)}</h3><div class="meta">Sin resultados</div>`;
+      const cols = Object.keys(rows[0]);
+      const body = rows.slice(0, limit).map(r =>
+        "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") + "</tr>"
+      ).join("");
+      return `
+        <h3>${esc(title)}</h3>
+        <div class="meta">Registros: ${rows.length}${rows.length > limit ? ` | Mostrando primeros ${limit}` : ""}</div>
+        <table>
+          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    function buildRawLayer(db, file, wb, file_id) {
+      let sheetCounterStart = db.raw_sheets.length;
+
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        const sheet_id = "sheet_" + (sheetCounterStart + db.raw_sheets.length + 1);
+        const ref = sheet["!ref"] || "A1:A1";
+        const range = XLSX.utils.decode_range(ref);
+
+        db.raw_sheets.push({
+          sheet_id,
+          file_id,
+          file_name: file.name,
+          sheet_name: sheetName,
+          range: ref,
+          max_row_index: range.e.r,
+          max_col_index: range.e.c
         });
-      }
 
-      for (const s of db.raw_sheets) {
-        structured.sheets_summary.push({
-          sheet_id: s.sheet_id,
-          file_id: s.file_id,
-          file_name: s.file_name,
-          sheet_name: s.sheet_name,
-          range: s.range,
-          max_row_index: s.max_row_index,
-          max_col_index: s.max_col_index,
-          cell_count: db.raw_cells.filter(c => c.sheet_id === s.sheet_id).length,
-          row_count: db.raw_rows.filter(r => r.sheet_id === s.sheet_id).length
-        });
-      }
+        const matrix = sheetToMatrix(sheet);
 
-      for (const r of db.raw_rows) {
-        if (r.row_index <= 4) {
-          structured.possible_headers.push({
-            sheet_id: r.sheet_id,
-            file_name: r.file_name,
-            sheet_name: r.sheet_name,
-            row_index: r.row_index,
-            values: JSON.stringify(r.values)
+        for (let r = 0; r < matrix.length; r++) {
+          db.raw_rows.push({
+            row_id: `${sheet_id}_row_${r}`,
+            sheet_id,
+            file_id,
+            file_name: file.name,
+            sheet_name: sheetName,
+            row_index: r,
+            values: matrix[r]
           });
         }
-        structured.row_lengths.push({
-          sheet_id: r.sheet_id,
-          file_name: r.file_name,
-          sheet_name: r.sheet_name,
-          row_index: r.row_index,
-          cell_count: Array.isArray(r.values) ? r.values.length : 0
-        });
-      }
 
-      db.structured_views = structured;
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          for (let C = range.s.c; C <= range.e.c; C++) {
+            const addr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = sheet[addr] || null;
+            db.raw_cells.push({
+              cell_id: `${sheet_id}_${addr}`,
+              sheet_id,
+              file_id,
+              file_name: file.name,
+              sheet_name: sheetName,
+              address: addr,
+              row_index: R,
+              col_index: C,
+              type: cell ? (cell.t ?? null) : null,
+              formula: cell ? (cell.f ?? null) : null,
+              raw_value: cell ? (cell.v ?? null) : null,
+              display_value: cell ? (cell.w ?? null) : null,
+              number_format: cell ? (cell.z ?? null) : null,
+              html_value: cell ? (cell.h ?? null) : null
+            });
+          }
+        }
+      }
+    }
+
+    function indexRow(db, base) {
+      db.index_records.push({
+        index_id: "idx_" + (db.index_records.length + 1),
+        archivo: base.archivo || "",
+        hoja: base.hoja || "",
+        fila_origen: base.fila_origen ?? null,
+        carrera: base.carrera || "",
+        docente: base.docente || "",
+        cedula: base.cedula || "",
+        curso: base.curso || "",
+        paralelo: base.paralelo || "",
+        evaluacion: base.evaluacion || "",
+        pregunta: base.pregunta || "",
+        valor: base.valor ?? "",
+        valor_numerico: base.valor_numerico ?? null,
+        participacion: base.participacion ?? null,
+        evaluadores: base.evaluadores ?? null,
+        percentil: base.percentil ?? null,
+        fecha: base.fecha || "",
+        hora: base.hora || "",
+        origen_tipo: base.origen_tipo || "",
+        raw_row_id: base.raw_row_id || "",
+        raw_sheet_id: base.raw_sheet_id || "",
+        raw_file_id: base.raw_file_id || "",
+        raw_json: JSON.stringify(base.raw_json ?? {})
+      });
+    }
+
+    function parseEvaluacionWorkbook(db, file, wb, file_id) {
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        const matrix = sheetToMatrix(sheet);
+        if (matrix.length < 2) continue;
+
+        const h = headerMap(matrix[0]);
+
+        const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+        const iNom = findIndex(h, ["docente", "nombre docente", "nombre", "nombres y apellidos"]);
+        const iEsc = findIndex(h, ["escuela", "carrera", "facultad", "school"]);
+        const iCurso = findIndex(h, ["materia", "asignatura", "curso", "nombre materia"]);
+        const iPar = findIndex(h, ["paralelo", "grupo", "seccion", "sección"]);
+        const iPregunta = findIndex(h, ["pregunta", "tipo de pregunta", "item", "ítem"]);
+        const iCal = findIndex(h, ["calificacion", "calificación", "promedio", "nota", "valor"]);
+        const iPart = findIndex(h, ["participacion", "participación", "% participación", "% participacion"]);
+        const iEvals = findIndex(h, ["evaluaciones", "evaluadores", "n evaluaciones", "cantidad"]);
+        const iPeriodo = findIndex(h, ["periodo", "período", "intake", "ciclo"]);
+        const iCodEval = findIndex(h, ["codigo evaluacion", "código evaluación", "id evaluacion", "evaluacion"]);
+
+        const rawSheet = db.raw_sheets.find(s => s.file_id === file_id && s.sheet_name === sheetName);
+
+        for (let r = 1; r < matrix.length; r++) {
+          const row = matrix[r];
+          const textRow = row.map(v => cleanText(v)).join(" | ");
+          if (!textRow) continue;
+
+          indexRow(db, {
+            archivo: file.name,
+            hoja: sheetName,
+            fila_origen: r,
+            carrera: asText(row, iEsc),
+            docente: asText(row, iNom),
+            cedula: looksLikeCedula(getVal(row, iCed)),
+            curso: asText(row, iCurso),
+            paralelo: asText(row, iPar),
+            evaluacion: asText(row, iCodEval) || asText(row, iPeriodo) || "evaluacion_docente",
+            pregunta: asText(row, iPregunta),
+            valor: asText(row, iCal),
+            valor_numerico: cleanNumber(getVal(row, iCal)),
+            participacion: cleanNumber(getVal(row, iPart)),
+            evaluadores: cleanNumber(getVal(row, iEvals)),
+            origen_tipo: "evaluacion_docente",
+            raw_row_id: `${rawSheet.sheet_id}_row_${r}`,
+            raw_sheet_id: rawSheet.sheet_id,
+            raw_file_id: file_id,
+            raw_json: row
+          });
+        }
+      }
+    }
+
+    function parseHistoricoWorkbook(db, file, wb, file_id) {
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        const matrix = sheetToMatrix(sheet);
+        if (matrix.length < 2) continue;
+
+        const h = headerMap(matrix[0]);
+
+        const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+        const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+        const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+        const iCurso = findIndex(h, ["materia", "curso", "asignatura"]);
+        const iEvals = findIndex(h, ["evaluadores", "evaluaciones", "n evaluaciones", "cantidad"]);
+        const iPercentil = findIndex(h, ["percentil", "percentile"]);
+        const iProm = findIndex(h, ["promedio", "calificacion", "calificación", "nota"]);
+        const iPeriodo = findIndex(h, ["periodo", "período", "intake", "ciclo"]);
+
+        const rawSheet = db.raw_sheets.find(s => s.file_id === file_id && s.sheet_name === sheetName);
+
+        for (let r = 1; r < matrix.length; r++) {
+          const row = matrix[r];
+          const textRow = row.map(v => cleanText(v)).join(" | ");
+          if (!textRow) continue;
+
+          indexRow(db, {
+            archivo: file.name,
+            hoja: sheetName,
+            fila_origen: r,
+            carrera: asText(row, iEsc) || sheetName,
+            docente: asText(row, iNom),
+            cedula: looksLikeCedula(getVal(row, iCed)),
+            curso: asText(row, iCurso),
+            paralelo: "",
+            evaluacion: asText(row, iPeriodo) || "historico",
+            pregunta: "",
+            valor: asText(row, iProm),
+            valor_numerico: cleanNumber(getVal(row, iProm)),
+            evaluadores: cleanNumber(getVal(row, iEvals)),
+            percentil: cleanNumber(getVal(row, iPercentil)),
+            origen_tipo: "historico",
+            raw_row_id: `${rawSheet.sheet_id}_row_${r}`,
+            raw_sheet_id: rawSheet.sheet_id,
+            raw_file_id: file_id,
+            raw_json: row
+          });
+        }
+      }
+    }
+
+    function parseAsistenciaWorkbook(db, file, wb, file_id) {
+      for (const sheetName of wb.SheetNames) {
+        const sheet = wb.Sheets[sheetName];
+        const matrix = sheetToMatrix(sheet);
+        if (matrix.length < 2) continue;
+
+        const h = headerMap(matrix[0]);
+
+        const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+        const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+        const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+        const iCurso = findIndex(h, ["materia", "curso", "asignatura"]);
+        const iPar = findIndex(h, ["paralelo", "grupo", "seccion", "sección"]);
+        const iAsis = findIndex(h, ["asistencia", "% asistencia", "porcentaje asistencia"]);
+        const iFalt = findIndex(h, ["horas faltadas", "faltas", "ausencia"]);
+        const iFecha = findIndex(h, ["fecha", "dia", "día"]);
+        const iHora = findIndex(h, ["hora", "horario", "franja"]);
+
+        const rawSheet = db.raw_sheets.find(s => s.file_id === file_id && s.sheet_name === sheetName);
+
+        for (let r = 1; r < matrix.length; r++) {
+          const row = matrix[r];
+          const textRow = row.map(v => cleanText(v)).join(" | ");
+          if (!textRow) continue;
+
+          indexRow(db, {
+            archivo: file.name,
+            hoja: sheetName,
+            fila_origen: r,
+            carrera: asText(row, iEsc),
+            docente: asText(row, iNom),
+            cedula: looksLikeCedula(getVal(row, iCed)),
+            curso: asText(row, iCurso),
+            paralelo: asText(row, iPar),
+            evaluacion: "asistencia",
+            pregunta: "",
+            valor: asText(row, iAsis),
+            valor_numerico: cleanNumber(getVal(row, iAsis)),
+            fecha: asText(row, iFecha),
+            hora: asText(row, iHora),
+            origen_tipo: norm(sheetName).includes("horario") ? "asistencia_horario" :
+                         norm(sheetName).includes("curso") ? "asistencia_curso" : "asistencia_docente",
+            raw_row_id: `${rawSheet.sheet_id}_row_${r}`,
+            raw_sheet_id: rawSheet.sheet_id,
+            raw_file_id: file_id,
+            raw_json: row
+          });
+
+          if (iFalt >= 0) {
+            indexRow(db, {
+              archivo: file.name,
+              hoja: sheetName,
+              fila_origen: r,
+              carrera: asText(row, iEsc),
+              docente: asText(row, iNom),
+              cedula: looksLikeCedula(getVal(row, iCed)),
+              curso: asText(row, iCurso),
+              paralelo: asText(row, iPar),
+              evaluacion: "faltas",
+              pregunta: "",
+              valor: asText(row, iFalt),
+              valor_numerico: cleanNumber(getVal(row, iFalt)),
+              fecha: asText(row, iFecha),
+              hora: asText(row, iHora),
+              origen_tipo: norm(sheetName).includes("horario") ? "asistencia_horario" :
+                           norm(sheetName).includes("curso") ? "asistencia_curso" : "asistencia_docente",
+              raw_row_id: `${rawSheet.sheet_id}_row_${r}`,
+              raw_sheet_id: rawSheet.sheet_id,
+              raw_file_id: file_id,
+              raw_json: row
+            });
+          }
+        }
+      }
+    }
+
+    function buildFacets() {
+      pushUniqueOptions("f_archivo", DB.index_records.map(r => r.archivo));
+      pushUniqueOptions("f_hoja", DB.index_records.map(r => r.hoja));
+      pushUniqueOptions("f_carrera", DB.index_records.map(r => r.carrera));
+      pushUniqueOptions("f_docente", DB.index_records.map(r => r.docente));
+      pushUniqueOptions("f_curso", DB.index_records.map(r => r.curso));
+      pushUniqueOptions("f_pregunta", DB.index_records.map(r => r.pregunta));
+      pushUniqueOptions("f_evaluacion", DB.index_records.map(r => r.evaluacion));
+    }
+
+    function applyMatch(value, filterValue) {
+      if (!filterValue) return true;
+      return norm(value).includes(norm(filterValue));
+    }
+
+    function aplicarFiltros() {
+      const fa = document.getElementById("f_archivo").value;
+      const fh = document.getElementById("f_hoja").value;
+      const fc = document.getElementById("f_carrera").value;
+      const fd = document.getElementById("f_docente").value;
+      const fce = document.getElementById("f_cedula").value;
+      const fcu = document.getElementById("f_curso").value;
+      const fp = document.getElementById("f_paralelo").value;
+      const fq = document.getElementById("f_pregunta").value;
+      const fe = document.getElementById("f_evaluacion").value;
+      const ft = document.getElementById("f_texto").value;
+
+      FILTERED = DB.index_records.filter(r =>
+        applyMatch(r.archivo, fa) &&
+        applyMatch(r.hoja, fh) &&
+        applyMatch(r.carrera, fc) &&
+        applyMatch(r.docente, fd) &&
+        applyMatch(r.cedula, fce) &&
+        applyMatch(r.curso, fcu) &&
+        applyMatch(r.paralelo, fp) &&
+        applyMatch(r.pregunta, fq) &&
+        applyMatch(r.evaluacion, fe) &&
+        (
+          !ft ||
+          norm(JSON.stringify(r)).includes(norm(ft))
+        )
+      );
+
+      renderFiltered();
+    }
+
+    function limpiarFiltros() {
+      ["f_archivo","f_hoja","f_carrera","f_docente","f_cedula","f_curso","f_paralelo","f_pregunta","f_evaluacion","f_texto"]
+        .forEach(id => document.getElementById(id).value = "");
+      FILTERED = DB.index_records.slice();
+      renderFiltered();
+    }
+
+    function renderFiltered() {
+      const salida = document.getElementById("salida");
+
+      const sample = FILTERED.slice(0, 200).map(r => ({
+        archivo: r.archivo,
+        hoja: r.hoja,
+        fila_origen: r.fila_origen,
+        carrera: r.carrera,
+        docente: r.docente,
+        cedula: r.cedula,
+        curso: r.curso,
+        paralelo: r.paralelo,
+        evaluacion: r.evaluacion,
+        pregunta: r.pregunta,
+        valor: r.valor,
+        valor_numerico: r.valor_numerico,
+        participacion: r.participacion,
+        evaluadores: r.evaluadores,
+        percentil: r.percentil,
+        fecha: r.fecha,
+        hora: r.hora,
+        origen_tipo: r.origen_tipo,
+        raw_row_id: r.raw_row_id
+      }));
+
+      const stats = `
+        <div class="meta">
+          <span class="badge">Resultados: ${FILTERED.length}</span>
+          <span class="badge">Archivos: ${new Set(FILTERED.map(x => x.archivo).filter(Boolean)).size}</span>
+          <span class="badge">Hojas: ${new Set(FILTERED.map(x => x.hoja).filter(Boolean)).size}</span>
+          <span class="badge">Docentes: ${new Set(FILTERED.map(x => x.docente).filter(Boolean)).size}</span>
+          <span class="badge">Carreras: ${new Set(FILTERED.map(x => x.carrera).filter(Boolean)).size}</span>
+          <span class="badge">Cursos: ${new Set(FILTERED.map(x => x.curso).filter(Boolean)).size}</span>
+        </div>
+      `;
+
+      salida.innerHTML =
+        stats +
+        tableHTML("Registros indexados filtrados", sample, 200) +
+        tableHTML("Ejemplo de filas crudas relacionadas", DB.raw_rows.filter(rr => FILTERED.slice(0,50).some(fr => fr.raw_row_id === rr.row_id)).map(rr => ({
+          row_id: rr.row_id,
+          file_name: rr.file_name,
+          sheet_name: rr.sheet_name,
+          row_index: rr.row_index,
+          values: JSON.stringify(rr.values)
+        })), 50);
     }
 
     async function procesar() {
       const status = document.getElementById("status");
       const resumen = document.getElementById("resumen");
       const salida = document.getElementById("salida");
-
       status.innerHTML = "";
       resumen.innerHTML = "";
       salida.innerHTML = "";
@@ -185,24 +609,22 @@
         return;
       }
 
-      status.innerHTML = '<p class="ok">Procesando sin pérdida de información...</p>';
+      status.innerHTML = '<p class="ok">Procesando y construyendo base híbrida...</p>';
 
       DB = {
         raw_files: [],
         raw_sheets: [],
         raw_rows: [],
         raw_cells: [],
-        structured_views: {}
+        index_records: []
       };
 
-      let globalFileIndex = 0;
-      let globalSheetIndex = 0;
+      let fileCounter = 0;
 
       for (const expectedName of EXPECTED_FILES) {
         const file = files.find(f => norm(f.name) === norm(expectedName));
         const wb = await readWorkbook(file);
-
-        const file_id = "file_" + (++globalFileIndex);
+        const file_id = "file_" + (++fileCounter);
 
         DB.raw_files.push({
           file_id,
@@ -211,99 +633,39 @@
           last_modified_epoch: file.lastModified
         });
 
-        for (const sheetName of wb.SheetNames) {
-          const sheet = wb.Sheets[sheetName];
-          const sheet_id = "sheet_" + (++globalSheetIndex);
-          const ref = sheet["!ref"] || "A1:A1";
-          const range = XLSX.utils.decode_range(ref);
+        buildRawLayer(DB, file, wb, file_id);
 
-          DB.raw_sheets.push({
-            sheet_id,
-            file_id,
-            file_name: file.name,
-            sheet_name: sheetName,
-            range: ref,
-            max_row_index: range.e.r,
-            max_col_index: range.e.c
-          });
-
-          const matrix = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: null,
-            raw: false,
-            blankrows: true
-          });
-
-          for (let r = 0; r < matrix.length; r++) {
-            DB.raw_rows.push({
-              row_id: `${sheet_id}_row_${r}`,
-              sheet_id,
-              file_id,
-              file_name: file.name,
-              sheet_name: sheetName,
-              row_index: r,
-              values: matrix[r]
-            });
-          }
-
-          for (let R = range.s.r; R <= range.e.r; R++) {
-            for (let C = range.s.c; C <= range.e.c; C++) {
-              const addr = XLSX.utils.encode_cell({ r: R, c: C });
-              const cell = sheet[addr] || null;
-
-              DB.raw_cells.push({
-                cell_id: `${sheet_id}_${addr}`,
-                sheet_id,
-                file_id,
-                file_name: file.name,
-                sheet_name: sheetName,
-                address: addr,
-                row_index: R,
-                col_index: C,
-                type: cell ? (cell.t ?? null) : null,
-                formula: cell ? (cell.f ?? null) : null,
-                raw_value: cell ? (cell.v ?? null) : null,
-                display_value: cell ? (cell.w ?? null) : null,
-                number_format: cell ? (cell.z ?? null) : null,
-                html_value: cell ? (cell.h ?? null) : null
-              });
-            }
-          }
+        if (norm(file.name).includes(norm("Evaluación docente individual.xlsx"))) {
+          parseEvaluacionWorkbook(DB, file, wb, file_id);
+        } else if (norm(file.name).includes(norm("Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"))) {
+          parseHistoricoWorkbook(DB, file, wb, file_id);
+        } else if (norm(file.name).includes(norm("Asistencia docente.xlsx"))) {
+          parseAsistenciaWorkbook(DB, file, wb, file_id);
         }
       }
 
-      buildStructuredViews(DB);
+      buildFacets();
+      document.getElementById("filtros").style.display = "block";
+
+      FILTERED = DB.index_records.slice();
 
       resumen.innerHTML = `
-        <div class="grid">
-          <div class="meta">
-            <h3>Contenido preservado</h3>
-            <div>Archivos: <strong>${DB.raw_files.length}</strong></div>
-            <div>Hojas: <strong>${DB.raw_sheets.length}</strong></div>
-            <div>Filas crudas: <strong>${DB.raw_rows.length}</strong></div>
-            <div>Celdas crudas: <strong>${DB.raw_cells.length}</strong></div>
-          </div>
-          <div class="meta">
-            <h3>Estructura</h3>
-            <div><strong>raw_files</strong>: metadatos de archivo</div>
-            <div><strong>raw_sheets</strong>: metadatos de hoja</div>
-            <div><strong>raw_rows</strong>: filas completas</div>
-            <div><strong>raw_cells</strong>: todas las celdas</div>
-            <div><strong>structured_views</strong>: índices sin alterar el original</div>
-          </div>
+        <div class="meta">
+          <div><strong>Archivos:</strong> ${DB.raw_files.length}</div>
+          <div><strong>Hojas:</strong> ${DB.raw_sheets.length}</div>
+          <div><strong>Filas crudas:</strong> ${DB.raw_rows.length}</div>
+          <div><strong>Celdas crudas:</strong> ${DB.raw_cells.length}</div>
+          <div><strong>Registros indexados filtrables:</strong> ${DB.index_records.length}</div>
+        </div>
+        <div class="meta">
+          <strong>Capas:</strong><br>
+          1. <strong>raw_*</strong> = preservación total sin pérdida<br>
+          2. <strong>index_records</strong> = índice analítico para filtrar por carrera, docente, evaluación, pregunta, curso y origen
         </div>
       `;
 
-      salida.innerHTML =
-        tableHTML("raw_files", DB.raw_files, 20) +
-        tableHTML("raw_sheets", DB.raw_sheets, 50) +
-        tableHTML("structured_views.files_summary", DB.structured_views.files_summary, 20) +
-        tableHTML("structured_views.sheets_summary", DB.structured_views.sheets_summary, 50) +
-        tableHTML("structured_views.possible_headers", DB.structured_views.possible_headers, 50) +
-        tableHTML("raw_rows", DB.raw_rows, 30) +
-        tableHTML("raw_cells", DB.raw_cells, 50);
-
-      status.innerHTML = '<p class="ok">Compilación completa generada sin pérdida.</p>';
+      renderFiltered();
+      status.innerHTML = '<p class="ok">Base híbrida construida correctamente.</p>';
     }
 
     function descargarJSON() {
@@ -311,14 +673,10 @@
         document.getElementById("status").innerHTML = '<p class="err">Primero debe procesar los archivos.</p>';
         return;
       }
-
-      const blob = new Blob([JSON.stringify(DB, null, 2)], {
-        type: "application/json;charset=utf-8"
-      });
-
+      const blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "base_completa_sin_perdida.json";
+      a.download = "base_hibrida_filtrable.json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -330,24 +688,12 @@
         return;
       }
 
-      const contenido = `
-        <h1>Base completa sin pérdida</h1>
-        <div class="meta">
-          <div>Archivos: ${DB.raw_files.length}</div>
-          <div>Hojas: ${DB.raw_sheets.length}</div>
-          <div>Filas crudas: ${DB.raw_rows.length}</div>
-          <div>Celdas crudas: ${DB.raw_cells.length}</div>
-        </div>
-        <h2>JSON consolidado completo</h2>
-        <pre>${esc(JSON.stringify(DB, null, 2))}</pre>
-      `;
-
-      const fullHTML = `
+      const html = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Base completa sin pérdida</title>
+  <title>Base híbrida filtrable</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
     .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
@@ -355,14 +701,23 @@
   </style>
 </head>
 <body>
-${contenido}
+  <h1>Base híbrida filtrable</h1>
+  <div class="meta">
+    <div>Archivos: ${DB.raw_files.length}</div>
+    <div>Hojas: ${DB.raw_sheets.length}</div>
+    <div>Filas crudas: ${DB.raw_rows.length}</div>
+    <div>Celdas crudas: ${DB.raw_cells.length}</div>
+    <div>Registros indexados: ${DB.index_records.length}</div>
+  </div>
+  <h2>JSON completo</h2>
+  <pre>${esc(JSON.stringify(DB, null, 2))}</pre>
 </body>
 </html>`.trim();
 
-      const blob = new Blob([fullHTML], { type: "text/html;charset=utf-8" });
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "base_completa_sin_perdida.html";
+      a.download = "base_hibrida_filtrable.html";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
