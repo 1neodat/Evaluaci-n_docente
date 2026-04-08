@@ -3,348 +3,244 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Generar informe docente</title>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.7/pizzip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-
+  <title>Compilar Excel a HTML</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 960px; margin: 20px auto; padding: 0 16px; }
-    h1 { font-size: 22px; }
-    .box { border: 1px solid #ccc; border-radius: 8px; padding: 16px; margin-bottom: 18px; }
-    label { display:block; margin:10px 0 6px; font-weight:bold; }
-    input[type="file"], select, button { width:100%; padding:10px; box-sizing:border-box; }
-    button { margin-top: 12px; cursor:pointer; }
-    pre { background:#f5f5f5; padding:12px; border-radius:6px; white-space:pre-wrap; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      line-height: 1.4;
+    }
+    h1, h2, h3 {
+      margin-top: 28px;
+    }
+    .panel {
+      border: 1px solid #ccc;
+      padding: 16px;
+      margin-bottom: 24px;
+      background: #f8f8f8;
+    }
+    .ok {
+      color: #0a7a0a;
+      font-weight: bold;
+    }
+    .error {
+      color: #b30000;
+      font-weight: bold;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0 28px 0;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #999;
+      padding: 6px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #efefef;
+    }
+    .meta {
+      background: #fafafa;
+      border: 1px solid #ddd;
+      padding: 8px;
+      margin: 8px 0 16px 0;
+      font-size: 13px;
+    }
+    button {
+      padding: 10px 16px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    #output {
+      margin-top: 24px;
+    }
   </style>
 </head>
 <body>
+  <h1>Compilador HTML de documentos Excel</h1>
 
-  <h1>Generar informe docente</h1>
+  <div class="panel">
+    <p>Seleccione estos tres archivos:</p>
+    <ul>
+      <li>Asistencia docente.xlsx</li>
+      <li>Evaluación docente individual.xlsx</li>
+      <li>Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx</li>
+    </ul>
 
-  <div class="box">
-    <label for="excelFile">Excel</label>
-    <input type="file" id="excelFile" accept=".xlsx,.xls" />
-
-    <label for="wordFile">Word</label>
-    <input type="file" id="wordFile" accept=".docx" />
-
-    <button id="btnLeer">Leer Excel</button>
+    <input type="file" id="files" multiple accept=".xlsx,.xls" />
+    <br /><br />
+    <button onclick="procesarArchivos()">Compilar</button>
+    <button onclick="descargarHTML()">Descargar HTML compilado</button>
+    <div id="status"></div>
   </div>
 
-  <div class="box">
-    <label for="docenteSelect">Docente</label>
-    <select id="docenteSelect" disabled>
-      <option value="">Seleccione</option>
-    </select>
-
-    <label for="carreraSelect">Carrera</label>
-    <select id="carreraSelect" disabled>
-      <option value="">Seleccione</option>
-    </select>
-
-    <button id="btnGenerar" disabled>Generar Word</button>
-  </div>
-
-  <div class="box">
-    <strong>Estado</strong>
-    <pre id="log">Esperando...</pre>
-  </div>
+  <div id="output"></div>
 
   <script>
-    let registros = [];
+    const nombresEsperados = [
+      "Asistencia docente.xlsx",
+      "Evaluación docente individual.xlsx",
+      "Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"
+    ];
 
-    function log(msg) {
-      document.getElementById("log").textContent = msg;
-    }
-
-    function readFile(file) {
-      return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = e => resolve(e.target.result);
-        r.onerror = reject;
-        r.readAsArrayBuffer(file);
-      });
-    }
-
-    function txt(v) {
-      return String(v ?? "").trim();
-    }
-
-    function fmt(n) {
-      const x = Number(n);
-      if (Number.isNaN(x)) return "";
-      return x.toFixed(2).replace(".", ",");
-    }
-
-    function esc(s) {
-      return String(s ?? "")
+    function escapeHTML(valor) {
+      return String(valor ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
-    function repAll(text, find, repl) {
-      return text.split(find).join(repl);
+    function normalizarNombre(nombre) {
+      return nombre.trim().toLowerCase();
     }
 
-    function unique(arr) {
-      return [...new Set(arr)];
+    async function leerArchivoComoArrayBuffer(file) {
+      return await file.arrayBuffer();
     }
 
-    function normal(s) {
-      return txt(s).toUpperCase();
-    }
-
-    function leerExcelCompleto(workbook) {
-      const salida = [];
-      const mapa = new Map();
-
-      workbook.SheetNames.forEach(sheetName => {
-        const ws = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-        let docenteActual = "";
-        let carreraActual = "";
-
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i] || [];
-
-          for (let c = 0; c < row.length; c++) {
-            const valor = txt(row[c]);
-
-            if (valor === "Docente:" || valor === "Docente") {
-              const posible = txt(row[c + 1]);
-              if (posible) docenteActual = posible;
-            }
-
-            if (
-              valor === "Escuela:" || valor === "Escuela" ||
-              valor === "Carrera:" || valor === "Carrera"
-            ) {
-              const posible = txt(row[c + 1]);
-              if (posible) carreraActual = posible;
-            }
-          }
-
-          const idxCurso = row.findIndex(v => txt(v) === "Curso:");
-          if (idxCurso !== -1) {
-            const nombreCurso = txt(row[idxCurso + 1]);
-
-            if (!docenteActual || !carreraActual || !nombreCurso) continue;
-
-            const notas = [];
-            for (let k = i + 2; k <= i + 9; k++) {
-              const num = Number(rows[k]?.[15]);
-              if (!Number.isNaN(num)) notas.push(num);
-            }
-
-            if (notas.length !== 8) continue;
-
-            const promedioN = notas.reduce((a, b) => a + b, 0) / 8;
-            const clave = normal(docenteActual) + "||" + normal(carreraActual);
-
-            if (!mapa.has(clave)) {
-              mapa.set(clave, {
-                sheetName,
-                docente: docenteActual,
-                carrera: carreraActual,
-                cursos: []
-              });
-            }
-
-            mapa.get(clave).cursos.push({
-              nombre: nombreCurso,
-              p1: fmt(notas[0]),
-              p2: fmt(notas[1]),
-              p3: fmt(notas[2]),
-              p4: fmt(notas[3]),
-              p5: fmt(notas[4]),
-              p6: fmt(notas[5]),
-              p7: fmt(notas[6]),
-              p8: fmt(notas[7]),
-              promedio: fmt(promedioN),
-              promedioN
-            });
-          }
-        }
-      });
-
-      for (const reg of mapa.values()) {
-        if (!reg.cursos.length) continue;
-
-        const promedioTodasN =
-          reg.cursos.reduce((a, b) => a + b.promedioN, 0) / reg.cursos.length;
-
-        salida.push({
-          ...reg,
-          promedio_todas_asignaturas: fmt(promedioTodasN),
-          promedio_total_100: fmt(promedioTodasN * 20)
-        });
+    function sheetToHTMLTable(data) {
+      if (!data || !data.length) {
+        return "<p><em>Hoja vacía</em></p>";
       }
 
-      return salida;
+      let html = "<table><tbody>";
+
+      for (let i = 0; i < data.length; i++) {
+        html += "<tr>";
+        const fila = data[i] || [];
+        for (let j = 0; j < fila.length; j++) {
+          const valor = fila[j] ?? "";
+          const tag = i === 0 ? "th" : "td";
+          html += `<${tag}>${escapeHTML(valor)}</${tag}>`;
+        }
+        html += "</tr>";
+      }
+
+      html += "</tbody></table>";
+      return html;
     }
 
-    function cargarDocentes() {
-      const sel = document.getElementById("docenteSelect");
-      const docentes = unique(registros.map(x => x.docente)).sort((a, b) => a.localeCompare(b, "es"));
-      sel.innerHTML = '<option value="">Seleccione</option>';
+    async function procesarArchivos() {
+      const input = document.getElementById("files");
+      const status = document.getElementById("status");
+      const output = document.getElementById("output");
+      output.innerHTML = "";
+      status.innerHTML = "";
 
-      docentes.forEach(d => {
-        const op = document.createElement("option");
-        op.value = d;
-        op.textContent = d;
-        sel.appendChild(op);
-      });
+      const files = Array.from(input.files || []);
+      if (files.length !== 3) {
+        status.innerHTML = '<p class="error">Debe seleccionar exactamente 3 archivos.</p>';
+        return;
+      }
 
-      sel.disabled = docentes.length === 0;
-    }
+      const nombresRecibidos = files.map(f => normalizarNombre(f.name));
+      const faltantes = nombresEsperados.filter(n => !nombresRecibidos.includes(normalizarNombre(n)));
+      const sobrantes = files.filter(f => !nombresEsperados.map(normalizarNombre).includes(normalizarNombre(f.name)));
 
-    function cargarCarreras(docente) {
-      const sel = document.getElementById("carreraSelect");
-      const carreras = unique(
-        registros
-          .filter(x => x.docente === docente)
-          .map(x => x.carrera)
-      ).sort((a, b) => a.localeCompare(b, "es"));
+      if (faltantes.length || sobrantes.length) {
+        status.innerHTML = `
+          <p class="error">Los archivos no coinciden exactamente con los esperados.</p>
+          <p><strong>Faltantes:</strong> ${faltantes.length ? faltantes.map(escapeHTML).join(", ") : "Ninguno"}</p>
+          <p><strong>No válidos:</strong> ${sobrantes.length ? sobrantes.map(f => escapeHTML(f.name)).join(", ") : "Ninguno"}</p>
+        `;
+        return;
+      }
 
-      sel.innerHTML = '<option value="">Seleccione</option>';
+      status.innerHTML = '<p class="ok">Procesando archivos...</p>';
 
-      carreras.forEach(c => {
-        const op = document.createElement("option");
-        op.value = c;
-        op.textContent = c;
-        sel.appendChild(op);
-      });
-
-      sel.disabled = carreras.length === 0;
-      document.getElementById("btnGenerar").disabled = true;
-    }
-
-    function getRegistroSeleccionado() {
-      const docente = document.getElementById("docenteSelect").value;
-      const carrera = document.getElementById("carreraSelect").value;
-      return registros.find(x => x.docente === docente && x.carrera === carrera) || null;
-    }
-
-    function reemplazarTablaCursos(xml, cursos) {
-      const filas = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g);
-      if (!filas) throw new Error("No se pudieron leer las filas del Word.");
-
-      const plantilla = filas.find(f =>
-        f.includes("{{nombre}}") &&
-        f.includes("{{p1}}") &&
-        f.includes("{{p8}}") &&
-        f.includes("{{promedio}}")
+      const ordenados = nombresEsperados.map(nombre =>
+        files.find(f => normalizarNombre(f.name) === normalizarNombre(nombre))
       );
 
-      if (!plantilla) {
-        throw new Error("No existe la fila plantilla con {{nombre}}, {{p1}} ... {{promedio}}.");
-      }
+      let compilado = `
+        <section>
+          <h1>Compilado de documentos Excel</h1>
+          <div class="meta">
+            <strong>Archivos procesados:</strong><br>
+            ${nombresEsperados.map(escapeHTML).join("<br>")}
+          </div>
+        </section>
+      `;
 
-      const generadas = cursos.map(c => {
-        let f = plantilla;
-        f = repAll(f, "{{nombre}}", esc(c.nombre));
-        f = repAll(f, "{{p1}}", esc(c.p1));
-        f = repAll(f, "{{p2}}", esc(c.p2));
-        f = repAll(f, "{{p3}}", esc(c.p3));
-        f = repAll(f, "{{p4}}", esc(c.p4));
-        f = repAll(f, "{{p5}}", esc(c.p5));
-        f = repAll(f, "{{p6}}", esc(c.p6));
-        f = repAll(f, "{{p7}}", esc(c.p7));
-        f = repAll(f, "{{p8}}", esc(c.p8));
-        f = repAll(f, "{{promedio}}", esc(c.promedio));
-        return f;
-      }).join("");
+      for (const file of ordenados) {
+        const buffer = await leerArchivoComoArrayBuffer(file);
+        const workbook = XLSX.read(buffer, { type: "array" });
 
-      return xml.replace(plantilla, generadas);
-    }
+        compilado += `<section>`;
+        compilado += `<h2>${escapeHTML(file.name)}</h2>`;
 
-    function reemplazarTexto(xml, data) {
-      let out = xml;
-      for (const [k, v] of Object.entries(data)) {
-        out = repAll(out, "{{" + k + "}}", esc(v));
-      }
-      return out;
-    }
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const data = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: "",
+            raw: false
+          });
 
-    document.getElementById("btnLeer").addEventListener("click", async () => {
-      try {
-        const excel = document.getElementById("excelFile").files[0];
-        if (!excel) throw new Error("Seleccione el Excel.");
+          const filas = data.length;
+          const columnas = data.reduce((max, fila) => Math.max(max, (fila || []).length), 0);
 
-        const wb = XLSX.read(await readFile(excel), { type: "array" });
-        registros = leerExcelCompleto(wb);
-
-        if (!registros.length) {
-          throw new Error("No se detectaron registros válidos en el Excel.");
+          compilado += `<h3>Hoja: ${escapeHTML(sheetName)}</h3>`;
+          compilado += `
+            <div class="meta">
+              <strong>Filas:</strong> ${filas} |
+              <strong>Columnas:</strong> ${columnas}
+            </div>
+          `;
+          compilado += sheetToHTMLTable(data);
         }
 
-        cargarDocentes();
-
-        log(
-          "Excel leído correctamente.\n" +
-          "Registros detectados: " + registros.length + "\n" +
-          "Docentes detectados: " + unique(registros.map(r => r.docente)).length + "\n" +
-          "Seleccione docente y carrera."
-        );
-      } catch (e) {
-        log("Error:\n" + e.message);
+        compilado += `</section>`;
       }
-    });
 
-    document.getElementById("docenteSelect").addEventListener("change", function () {
-      cargarCarreras(this.value);
-    });
+      output.innerHTML = compilado;
+      status.innerHTML = '<p class="ok">Compilación completada.</p>';
+    }
 
-    document.getElementById("carreraSelect").addEventListener("change", function () {
-      const reg = getRegistroSeleccionado();
-      document.getElementById("btnGenerar").disabled = !reg;
+    function descargarHTML() {
+      const contenido = document.getElementById("output").innerHTML;
 
-      if (reg) {
-        log(
-          "Selección lista.\n" +
-          "Docente: " + reg.docente + "\n" +
-          "Carrera: " + reg.carrera + "\n" +
-          "Cursos: " + reg.cursos.length
-        );
+      if (!contenido.trim()) {
+        document.getElementById("status").innerHTML = '<p class="error">Primero debe compilar los archivos.</p>';
+        return;
       }
-    });
 
-    document.getElementById("btnGenerar").addEventListener("click", async () => {
-      try {
-        const word = document.getElementById("wordFile").files[0];
-        if (!word) throw new Error("Seleccione el Word.");
+      const documentoCompleto = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Compilado de documentos Excel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
+    h1, h2, h3 { margin-top: 28px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 28px 0; font-size: 12px; }
+    th, td { border: 1px solid #999; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #efefef; }
+    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 16px 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+${contenido}
+</body>
+</html>`.trim();
 
-        const reg = getRegistroSeleccionado();
-        if (!reg) throw new Error("Seleccione docente y carrera.");
-
-        const zip = new PizZip(await readFile(word));
-        let xml = zip.file("word/document.xml").asText();
-
-        xml = reemplazarTablaCursos(xml, reg.cursos);
-        xml = reemplazarTexto(xml, {
-          docente: reg.docente,
-          carrera: reg.carrera,
-          promedio_todas_asignaturas: reg.promedio_todas_asignaturas,
-          promedio_total_100: reg.promedio_total_100
-        });
-
-        zip.file("word/document.xml", xml);
-
-        const blob = zip.generate({
-          type: "blob",
-          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        });
-
-        saveAs(blob, "Informe_" + reg.docente.replace(/[\\/:*?"<>|]+/g, "_") + ".docx");
-        log("Documento generado correctamente.");
-      } catch (e) {
-        log("Error:\n" + e.message);
-      }
-    });
+      const blob = new Blob([documentoCompleto], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "compilado_documentos.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   </script>
 </body>
 </html>
