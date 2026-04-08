@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Base compilada limpia v2</title>
+  <title>Base compilada íntegra v3</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 18px; color: #202124; }
@@ -27,10 +27,17 @@
   </style>
 </head>
 <body>
-  <h1>Base compilada limpia v2</h1>
+  <h1>Base compilada íntegra v3</h1>
 
   <div class="panel">
-    <div>Esta versión compila los tres Excel en una sola base general, conservando todas las columnas de origen como campos utilizables.</div>
+    <div>Esta versión no elimina columnas. Cada fila conserva:</div>
+    <ul>
+      <li>campos estándar para filtrar</li>
+      <li>todas las columnas originales de la hoja</li>
+      <li>fila cruda completa en JSON</li>
+      <li>metadatos de encabezado usados para interpretar la hoja</li>
+    </ul>
+    <div>Archivos requeridos:</div>
     <ul>
       <li>Asistencia docente.xlsx</li>
       <li>Evaluación docente individual.xlsx</li>
@@ -67,7 +74,7 @@
       <button onclick="aplicarFiltros()">Aplicar filtros</button>
       <button onclick="limpiarFiltros()">Limpiar filtros</button>
     </div>
-    <div class="muted" style="margin-top:8px;">La tabla final es <code>base_general</code>. Además de los campos estándar, incorpora todas las columnas detectadas en todos los Excel.</div>
+    <div class="muted" style="margin-top:8px;">La tabla final es <code>base_general</code>. No se descartan columnas de origen; se agregan a la base como columnas dinámicas.</div>
   </div>
 
   <div id="vista" class="panel hidden">
@@ -90,29 +97,29 @@ const REQUIRED = [
 ];
 
 const BASE_FIELDS = [
-  "_archivo","_hoja","_fila_excel","_tipo_registro",
+  "_archivo","_hoja","_fila_excel","_tipo_registro","_header_row","_header_strategy",
   "carrera","docente","cedula","materia","paralelo",
   "codigo_curso","codigo_evaluacion","periodo",
   "pregunta","pregunta_texto",
   "valor_numerico","valor_texto","evaluadores","participacion_pct","percentil",
-  "fecha","hora"
+  "fecha","hora","_raw_row_json"
 ];
 
 const SYNONYMS = {
-  carrera: ["carrera","escuela","facultad","school","programa"],
+  carrera: ["carrera","escuela","facultad","school","programa","area","área"],
   docente: ["docente","nombre docente","docente nombre","nombre","nombres y apellidos","profesor","teacher"],
   cedula: ["cedula","cédula","identificacion","identificación","dni","documento"],
   materia: ["materia","asignatura","curso","nombre materia","nombre curso","subject"],
   paralelo: ["paralelo","grupo","seccion","sección"],
   codigo_curso: ["codigo curso","código curso","curso id","id curso","nrc","codigo","código"],
-  codigo_evaluacion: ["codigo evaluacion","código evaluación","id evaluacion","id evaluación","evaluacion id"],
-  periodo: ["periodo","período","intake","ciclo","semestre"],
-  pregunta: ["pregunta","item","ítem","codigo pregunta","código pregunta","id pregunta"],
+  codigo_evaluacion: ["codigo evaluacion","código evaluación","id evaluacion","id evaluación","evaluacion id","codigoevaluacion"],
+  periodo: ["periodo","período","intake","ciclo","semestre","periodo lectivo","periodolectivo"],
+  pregunta: ["pregunta","item","ítem","codigo pregunta","código pregunta","id pregunta","codigopregunta"],
   pregunta_texto: ["texto pregunta","pregunta texto","descripcion pregunta","descripción pregunta","enunciado","texto","descripcion","descripción"],
   valor_numerico: ["calificacion","calificación","promedio","nota","valor","score","asistencia","porcentaje asistencia","% asistencia","faltas","horas faltadas","percentil"],
   valor_texto: ["observacion","observación","comentario","detalle","estado","respuesta"],
   evaluadores: ["evaluadores","evaluaciones","n evaluaciones","numero evaluaciones","número evaluaciones","cantidad"],
-  participacion_pct: ["participacion","participación","% participacion","% participación"],
+  participacion_pct: ["participacion","participación","% participacion","% participación","pctevaluacion","pctevaluaciontotal"],
   percentil: ["percentil","percentile"],
   fecha: ["fecha","dia","día"],
   hora: ["hora","horario","franja"]
@@ -164,26 +171,56 @@ function readWorkbook(file) {
   return file.arrayBuffer().then(ab => XLSX.read(ab, { type: "array", raw: false }));
 }
 
-function detectHeaderRow(matrix) {
+function validateFiles(files) {
+  const names = files.map(f => norm(f.name));
+  const missing = REQUIRED.filter(n => !names.includes(norm(n)));
+  const invalid = files.filter(f => !REQUIRED.map(norm).includes(norm(f.name)));
+  return { missing, invalid };
+}
+
+function nonEmptyCount(row) {
+  return (row || []).filter(v => cleanText(v) !== "").length;
+}
+
+function detectHeaderRowGeneral(matrix) {
   let best = 0, bestScore = -1;
   const scan = Math.min(matrix.length, 15);
   for (let r = 0; r < scan; r++) {
     const row = (matrix[r] || []).map(cleanText);
-    const filled = row.filter(Boolean).length;
+    const filled = nonEmptyCount(row);
     if (!filled) continue;
-    let score = 0;
     const joined = norm(row.join(" | "));
+    let score = filled * 0.15;
     for (const key of Object.keys(SYNONYMS)) {
       for (const alias of SYNONYMS[key]) {
-        if (joined.includes(norm(alias))) { score++; break; }
+        if (joined.includes(norm(alias))) { score += 3; break; }
       }
     }
-    if (filled >= 2 && score >= bestScore) {
-      best = r;
-      bestScore = score;
-    }
+    if (score > bestScore) { best = r; bestScore = score; }
   }
   return best;
+}
+
+function flattenHeaders(fileName, sheetName, matrix) {
+  const f = norm(fileName), s = norm(sheetName);
+
+  if (f.includes("historico")) {
+    const row0 = (matrix[0] || []).map(cleanText);
+    const row1 = (matrix[1] || []).map(cleanText);
+    const maxLen = Math.max(row0.length, row1.length);
+    const headers = [];
+    for (let i = 0; i < maxLen; i++) {
+      const top = row0[i] || "";
+      const bot = row1[i] || "";
+      const label = [top, bot].filter(Boolean).join(" | ");
+      headers.push(label || ("col_" + (i + 1)));
+    }
+    return { headerRow: 1, dataStart: 2, headers, strategy: "historico_2_filas" };
+  }
+
+  const hr = detectHeaderRowGeneral(matrix);
+  const headers = (matrix[hr] || []).map((v, i) => cleanText(v) || ("col_" + (i + 1)));
+  return { headerRow: hr, dataStart: hr + 1, headers, strategy: "simple" };
 }
 
 function detectTipoRegistro(fileName, sheetName) {
@@ -221,37 +258,125 @@ function extractCanonical(row, hidx) {
   return out;
 }
 
-function buildDynamicObject(header, row) {
+function buildDynamicObject(headers, row) {
   const obj = {};
-  for (let i = 0; i < header.length; i++) {
-    const key = slugHeader(header[i], "col_" + (i + 1));
+  for (let i = 0; i < headers.length; i++) {
+    const key = slugHeader(headers[i], "col_" + (i + 1));
     if (!(key in obj)) obj[key] = row[i] ?? "";
     else obj[key + "_" + (i + 1)] = row[i] ?? "";
   }
   return obj;
 }
 
-function parseSheet(fileName, sheetName, sheet) {
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
-  if (!matrix.length) return [];
-  const headerRow = detectHeaderRow(matrix);
-  const header = (matrix[headerRow] || []).map((v, i) => cleanText(v) || ("col_" + (i + 1)));
-  const hidx = buildHeaderIndex(header);
-  const tipo = detectTipoRegistro(fileName, sheetName);
+function parseHistoricoWide(fileName, sheetName, matrix, meta) {
+  const headers = meta.headers;
+  const idx = buildHeaderIndex(headers);
   const out = [];
+  const cedulaIdx = pickIndex(idx, ["cedula"]);
+  const docenteIdx = pickIndex(idx, ["docente"]);
+  const escuelaIdx = pickIndex(idx, ["escuela"]);
 
-  for (let r = headerRow + 1; r < matrix.length; r++) {
+  const periodGroups = [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    if (norm(h).includes("promedio de nota") || norm(h).includes("evaluadores") || norm(h).includes("percentil")) {
+      const parts = h.split("|").map(cleanText);
+      if (parts.length >= 2) {
+        periodGroups.push({ col: i, periodo: cleanText(parts[0]), metrica: cleanText(parts[1]) });
+      }
+    }
+  }
+
+  for (let r = meta.dataStart; r < matrix.length; r++) {
     const row = matrix[r] || [];
     if (!row.some(v => cleanText(v) !== "")) continue;
 
-    const dyn = buildDynamicObject(header, row);
+    const dyn = buildDynamicObject(headers, row);
+    const base = {
+      _archivo: fileName,
+      _hoja: sheetName,
+      _fila_excel: r + 1,
+      _tipo_registro: "historico",
+      _header_row: meta.headerRow + 1,
+      _header_strategy: meta.strategy,
+      carrera: cleanText(row[escuelaIdx]),
+      docente: cleanText(row[docenteIdx]),
+      cedula: looksLikeCedula(row[cedulaIdx]),
+      materia: "",
+      paralelo: "",
+      codigo_curso: "",
+      codigo_evaluacion: "",
+      pregunta: "",
+      pregunta_texto: "",
+      fecha: "",
+      hora: "",
+      ...dyn
+    };
+
+    if (periodGroups.length) {
+      const uniquePeriods = [...new Set(periodGroups.map(g => g.periodo).filter(Boolean))];
+      uniquePeriods.forEach(periodo => {
+        const rec = {
+          ...base,
+          periodo,
+          valor_numerico: null,
+          valor_texto: "",
+          evaluadores: null,
+          participacion_pct: null,
+          percentil: null
+        };
+        periodGroups.filter(g => g.periodo === periodo).forEach(g => {
+          const value = row[g.col];
+          const m = norm(g.metrica);
+          if (m.includes("promedio")) {
+            rec.valor_numerico = cleanNumber(value);
+            rec.valor_texto = cleanText(value);
+          } else if (m.includes("evaluadores")) {
+            rec.evaluadores = cleanNumber(value);
+          } else if (m.includes("percentil")) {
+            rec.percentil = cleanNumber(value);
+          }
+        });
+        rec._raw_row_json = JSON.stringify(row);
+        out.push(rec);
+      });
+    } else {
+      const rec = {
+        ...base,
+        periodo: "",
+        valor_numerico: null,
+        valor_texto: "",
+        evaluadores: null,
+        participacion_pct: null,
+        percentil: null,
+        _raw_row_json: JSON.stringify(row)
+      };
+      out.push(rec);
+    }
+  }
+  return out;
+}
+
+function parseGenericSheet(fileName, sheetName, matrix, meta) {
+  const headers = meta.headers;
+  const hidx = buildHeaderIndex(headers);
+  const tipo = detectTipoRegistro(fileName, sheetName);
+  const out = [];
+
+  for (let r = meta.dataStart; r < matrix.length; r++) {
+    const row = matrix[r] || [];
+    if (!row.some(v => cleanText(v) !== "")) continue;
+
+    const dyn = buildDynamicObject(headers, row);
     const canon = extractCanonical(row, hidx);
 
-    const record = {
+    const rec = {
       _archivo: fileName,
       _hoja: sheetName,
       _fila_excel: r + 1,
       _tipo_registro: tipo,
+      _header_row: meta.headerRow + 1,
+      _header_strategy: meta.strategy,
       carrera: cleanText(canon.carrera),
       docente: cleanText(canon.docente),
       cedula: looksLikeCedula(canon.cedula),
@@ -263,26 +388,32 @@ function parseSheet(fileName, sheetName, sheet) {
       pregunta: cleanText(canon.pregunta),
       pregunta_texto: cleanText(canon.pregunta_texto),
       valor_numerico: cleanNumber(canon.valor_numerico),
-      valor_texto: cleanText(canon.valor_texto) || (cleanNumber(canon.valor_numerico) !== null ? String(cleanNumber(canon.valor_numerico)) : ""),
+      valor_texto: cleanText(canon.valor_texto),
       evaluadores: cleanNumber(canon.evaluadores),
       participacion_pct: cleanNumber(canon.participacion_pct),
       percentil: cleanNumber(canon.percentil),
       fecha: cleanText(canon.fecha),
       hora: cleanText(canon.hora),
-      ...dyn
+      ...dyn,
+      _raw_row_json: JSON.stringify(row)
     };
 
-    const hasAny = Object.values(record).some(v => v !== "" && v !== null);
-    if (hasAny) out.push(record);
+    if (!rec.valor_texto && rec.valor_numerico !== null) rec.valor_texto = String(rec.valor_numerico);
+
+    const hasAnyUseful = Object.values(rec).some(v => v !== "" && v !== null);
+    if (hasAnyUseful) out.push(rec);
   }
   return out;
 }
 
-function validateFiles(files) {
-  const names = files.map(f => norm(f.name));
-  const missing = REQUIRED.filter(n => !names.includes(norm(n)));
-  const invalid = files.filter(f => !REQUIRED.map(norm).includes(norm(f.name)));
-  return { missing, invalid };
+function parseSheet(fileName, sheetName, sheet) {
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
+  if (!matrix.length) return [];
+  const meta = flattenHeaders(fileName, sheetName, matrix);
+  if (norm(fileName).includes("historico")) {
+    return parseHistoricoWide(fileName, sheetName, matrix, meta);
+  }
+  return parseGenericSheet(fileName, sheetName, matrix, meta);
 }
 
 function setOptions(id, values, allLabel) {
@@ -298,6 +429,13 @@ function setOptions(id, values, allLabel) {
     o.textContent = v;
     el.appendChild(o);
   });
+}
+
+function buildAllColumns(rows) {
+  const set = new Set(BASE_FIELDS);
+  rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
+  const dynamic = [...set].filter(c => !BASE_FIELDS.includes(c)).sort((a,b)=>a.localeCompare(b,"es"));
+  return [...BASE_FIELDS, ...dynamic];
 }
 
 function loadFilterOptions() {
@@ -322,7 +460,7 @@ function renderSummary() {
       <div class="kpi">Docentes: <strong>${new Set(baseGeneral.map(x => x.docente).filter(Boolean)).size}</strong></div>
       <div class="kpi">Materias: <strong>${new Set(baseGeneral.map(x => x.materia).filter(Boolean)).size}</strong></div>
     </div>
-    <div class="muted">La base final es una sola tabla general. Además de los campos estándar, se agregan todas las columnas originales detectadas en cualquier hoja.</div>
+    <div class="muted">Cada fila mantiene todas las columnas originales detectadas en la hoja. Además conserva <code>_raw_row_json</code> para verificar que nada se haya perdido.</div>
   `;
 }
 
@@ -381,13 +519,6 @@ function limpiarFiltros() {
   renderTable();
 }
 
-function buildAllColumns(rows) {
-  const set = new Set(BASE_FIELDS);
-  rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
-  const dynamic = [...set].filter(c => !BASE_FIELDS.includes(c)).sort((a,b)=>a.localeCompare(b,"es"));
-  return [...BASE_FIELDS, ...dynamic];
-}
-
 async function procesar() {
   const status = document.getElementById("status");
   const files = Array.from(document.getElementById("files").files || []);
@@ -404,15 +535,15 @@ async function procesar() {
     return;
   }
 
-  status.innerHTML = '<div class="ok">Compilando base general limpia...</div>';
+  status.innerHTML = '<div class="ok">Compilando base íntegra...</div>';
   baseGeneral = [];
 
   for (const req of REQUIRED) {
     const file = files.find(f => norm(f.name) === norm(req));
     const wb = await readWorkbook(file);
     for (const sheetName of wb.SheetNames) {
-      const parsed = parseSheet(file.name, sheetName, wb.Sheets[sheetName]);
-      baseGeneral.push(...parsed);
+      const rows = parseSheet(file.name, sheetName, wb.Sheets[sheetName]);
+      baseGeneral.push(...rows);
     }
   }
 
@@ -427,7 +558,7 @@ async function procesar() {
   document.getElementById("filtros").classList.remove("hidden");
   document.getElementById("vista").classList.remove("hidden");
 
-  status.innerHTML = '<div class="ok">Base compilada correctamente.</div>';
+  status.innerHTML = '<div class="ok">Base compilada correctamente. Esta versión conserva columnas originales y fila cruda.</div>';
 }
 
 function csvEscape(v) {
@@ -445,7 +576,7 @@ function exportarCSV() {
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "base_general_limpia_v2.csv";
+  a.download = "base_general_integra_v3.csv";
   a.click();
 }
 
@@ -457,7 +588,7 @@ function exportarJSON() {
   }, null, 2)], { type: "application/json;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "base_general_limpia_v2.json";
+  a.download = "base_general_integra_v3.json";
   a.click();
 }
 </script>
