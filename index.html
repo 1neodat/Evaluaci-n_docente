@@ -3,243 +3,618 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Compilar Excel a HTML</title>
+  <title>Base estructurada desde Excel</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 24px;
-      line-height: 1.4;
-    }
-    h1, h2, h3 {
-      margin-top: 28px;
-    }
-    .panel {
-      border: 1px solid #ccc;
-      padding: 16px;
-      margin-bottom: 24px;
-      background: #f8f8f8;
-    }
-    .ok {
-      color: #0a7a0a;
-      font-weight: bold;
-    }
-    .error {
-      color: #b30000;
-      font-weight: bold;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 12px 0 28px 0;
-      font-size: 12px;
-    }
-    th, td {
-      border: 1px solid #999;
-      padding: 6px;
-      vertical-align: top;
-      text-align: left;
-    }
-    th {
-      background: #efefef;
-    }
-    .meta {
-      background: #fafafa;
-      border: 1px solid #ddd;
-      padding: 8px;
-      margin: 8px 0 16px 0;
-      font-size: 13px;
-    }
-    button {
-      padding: 10px 16px;
-      cursor: pointer;
-      margin-right: 8px;
-    }
-    #output {
-      margin-top: 24px;
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
+    h1, h2, h3 { margin: 16px 0 8px; }
+    .panel { border: 1px solid #ccc; padding: 16px; margin-bottom: 16px; background: #f8f8f8; }
+    .ok { color: #0b7a0b; font-weight: bold; }
+    .err { color: #b30000; font-weight: bold; }
+    button { padding: 10px 14px; margin-right: 8px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; font-size: 12px; }
+    th, td { border: 1px solid #bbb; padding: 6px; text-align: left; vertical-align: top; }
+    th { background: #efefef; }
+    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   </style>
 </head>
 <body>
-  <h1>Compilador HTML de documentos Excel</h1>
+  <h1>Consolidador estructurado de Excel</h1>
 
   <div class="panel">
-    <p>Seleccione estos tres archivos:</p>
+    <p>Cargue exactamente estos archivos:</p>
     <ul>
       <li>Asistencia docente.xlsx</li>
       <li>Evaluación docente individual.xlsx</li>
       <li>Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx</li>
     </ul>
-
     <input type="file" id="files" multiple accept=".xlsx,.xls" />
-    <br /><br />
-    <button onclick="procesarArchivos()">Compilar</button>
-    <button onclick="descargarHTML()">Descargar HTML compilado</button>
+    <br><br>
+    <button onclick="procesar()">Construir base estructurada</button>
+    <button onclick="descargarJSON()">Descargar JSON</button>
+    <button onclick="descargarHTML()">Descargar HTML</button>
     <div id="status"></div>
   </div>
 
-  <div id="output"></div>
+  <div id="resumen"></div>
+  <div id="salida"></div>
 
   <script>
-    const nombresEsperados = [
+    const EXPECTED_FILES = [
       "Asistencia docente.xlsx",
       "Evaluación docente individual.xlsx",
       "Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"
     ];
 
-    function escapeHTML(valor) {
-      return String(valor ?? "")
+    let DB = null;
+
+    function esc(v) {
+      return String(v ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
     }
 
-    function normalizarNombre(nombre) {
-      return nombre.trim().toLowerCase();
+    function norm(s) {
+      return String(s ?? "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
-    async function leerArchivoComoArrayBuffer(file) {
-      return await file.arrayBuffer();
+    function cleanText(v) {
+      if (v === null || v === undefined) return "";
+      return String(v).replace(/\s+/g, " ").trim();
     }
 
-    function sheetToHTMLTable(data) {
-      if (!data || !data.length) {
-        return "<p><em>Hoja vacía</em></p>";
+    function cleanNumber(v) {
+      if (v === null || v === undefined || v === "") return null;
+      if (typeof v === "number") return Number.isFinite(v) ? v : null;
+      let s = String(v).trim();
+      if (!s) return null;
+      s = s.replace(/%/g, "").replace(/\s/g, "");
+      s = s.replace(/\.(?=\d{3}(\D|$))/g, "");
+      s = s.replace(",", ".");
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function looksLikeCedula(v) {
+      const s = String(v ?? "").replace(/\D/g, "");
+      return s.length >= 8 && s.length <= 13 ? s : "";
+    }
+
+    function headerMap(row) {
+      const m = {};
+      row.forEach((h, i) => { m[norm(h)] = i; });
+      return m;
+    }
+
+    function findIndex(hmap, candidates) {
+      for (const c of candidates) {
+        const key = norm(c);
+        if (key in hmap) return hmap[key];
       }
+      return -1;
+    }
 
-      let html = "<table><tbody>";
+    function sheetToMatrix(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+    }
 
-      for (let i = 0; i < data.length; i++) {
-        html += "<tr>";
-        const fila = data[i] || [];
-        for (let j = 0; j < fila.length; j++) {
-          const valor = fila[j] ?? "";
-          const tag = i === 0 ? "th" : "td";
-          html += `<${tag}>${escapeHTML(valor)}</${tag}>`;
+    function tableHTML(title, rows, limit = 30) {
+      if (!rows || !rows.length) {
+        return `<h3>${esc(title)}</h3><div class="meta">Sin registros</div>`;
+      }
+      const cols = Object.keys(rows[0]);
+      const body = rows.slice(0, limit).map(r =>
+        "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") + "</tr>"
+      ).join("");
+      return `
+        <h3>${esc(title)}</h3>
+        <div class="meta">Registros: ${rows.length}${rows.length > limit ? ` | Mostrando primeros ${limit}` : ""}</div>
+        <table>
+          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    async function readWorkbook(file) {
+      const ab = await file.arrayBuffer();
+      return XLSX.read(ab, { type: "array" });
+    }
+
+    function makeId(prefix, ...parts) {
+      return prefix + "_" + parts.map(v => norm(v || "na").replace(/[^a-z0-9]+/g, "_")).join("_");
+    }
+
+    function ensureDocente(db, cedula, nombre, extras = {}) {
+      const key = cedula || norm(nombre);
+      if (!key) return null;
+      if (!db._docentesMap[key]) {
+        db._docentesMap[key] = {
+          docente_id: makeId("doc", cedula || nombre),
+          cedula: cedula || "",
+          nombre: cleanText(nombre),
+          ...extras
+        };
+        db.docentes.push(db._docentesMap[key]);
+      } else {
+        const d = db._docentesMap[key];
+        if (!d.cedula && cedula) d.cedula = cedula;
+        if (!d.nombre && nombre) d.nombre = cleanText(nombre);
+        Object.assign(d, Object.fromEntries(Object.entries(extras).filter(([_, v]) => v !== "" && v !== null && v !== undefined)));
+      }
+      return db._docentesMap[key];
+    }
+
+    function ensureCurso(db, nombreCurso, paralelo, codigoCurso, escuela) {
+      const key = [norm(nombreCurso), norm(paralelo), String(codigoCurso || ""), norm(escuela)].join("|");
+      if (!db._cursosMap[key]) {
+        db._cursosMap[key] = {
+          curso_id: makeId("cur", nombreCurso, paralelo, codigoCurso, escuela),
+          codigo_curso: cleanText(codigoCurso),
+          curso: cleanText(nombreCurso),
+          paralelo: cleanText(paralelo),
+          escuela: cleanText(escuela)
+        };
+        db.cursos.push(db._cursosMap[key]);
+      }
+      return db._cursosMap[key];
+    }
+
+    function parseEvaluacionWorkbook(wb, db) {
+      const sheetNames = wb.SheetNames.map(s => norm(s));
+      const pick = (namePart) => wb.SheetNames.find(s => norm(s).includes(norm(namePart)));
+
+      const docentesSheetName = pick("docentes");
+      const bdSheetName = pick("bd");
+      const preguntasSheetName = pick("preguntas");
+      const reporteSheetName = pick("reporteglobal") || pick("reporte global");
+
+      if (docentesSheetName) {
+        const data = sheetToMatrix(wb.Sheets[docentesSheetName]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+          const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+          const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const ced = looksLikeCedula(row[iCed]);
+            const nom = cleanText(row[iNom]);
+            if (ced || nom) ensureDocente(db, ced, nom);
+          }
         }
-        html += "</tr>";
       }
 
-      html += "</tbody></table>";
-      return html;
+      if (bdSheetName) {
+        const data = sheetToMatrix(wb.Sheets[bdSheetName]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+
+          const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+          const iNom = findIndex(h, ["docente", "nombre docente", "nombres y apellidos"]);
+          const iEsc = findIndex(h, ["escuela", "carrera", "facultad", "school"]);
+          const iCurso = findIndex(h, ["materia", "asignatura", "curso", "nombre materia"]);
+          const iPar = findIndex(h, ["paralelo", "grupo", "seccion", "sección"]);
+          const iCodCurso = findIndex(h, ["codigo curso", "código curso", "nrc", "id curso", "curso id", "codigo"]);
+          const iPregunta = findIndex(h, ["pregunta", "tipo de pregunta", "item", "ítem"]);
+          const iCal = findIndex(h, ["calificacion", "calificación", "promedio", "nota", "valor"]);
+          const iEvals = findIndex(h, ["evaluaciones", "n evaluaciones", "numero evaluaciones", "cantidad"]);
+          const iParticip = findIndex(h, ["participacion", "participación", "% participacion", "% participación"]);
+          const iPeriodo = findIndex(h, ["periodo", "período", "intake", "ciclo"]);
+          const iCodEval = findIndex(h, ["codigo evaluacion", "código evaluación", "id evaluacion", "evaluacion id"]);
+
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const ced = looksLikeCedula(row[iCed]);
+            const nom = cleanText(row[iNom]);
+            const docente = ensureDocente(db, ced, nom);
+
+            const curso = ensureCurso(
+              db,
+              row[iCurso],
+              row[iPar],
+              row[iCodCurso],
+              row[iEsc]
+            );
+
+            const reg = {
+              evaluacion_detalle_id: makeId("ed", docente?.docente_id, curso?.curso_id, row[iPregunta], r),
+              docente_id: docente?.docente_id || "",
+              curso_id: curso?.curso_id || "",
+              codigo_evaluacion: cleanText(row[iCodEval]),
+              periodo: cleanText(row[iPeriodo]),
+              pregunta: cleanText(row[iPregunta]),
+              calificacion: cleanNumber(row[iCal]),
+              evaluaciones: cleanNumber(row[iEvals]),
+              participacion_pct: cleanNumber(row[iParticip])
+            };
+
+            const hasUseful =
+              reg.docente_id || reg.curso_id || reg.pregunta || reg.calificacion !== null ||
+              reg.evaluaciones !== null || reg.participacion_pct !== null;
+
+            if (hasUseful) db.evaluacion_detalle.push(reg);
+          }
+
+          const summaryMap = {};
+          for (const x of db.evaluacion_detalle) {
+            const k = [x.docente_id, x.curso_id, x.periodo].join("|");
+            if (!summaryMap[k]) {
+              summaryMap[k] = {
+                evaluacion_resumen_id: makeId("er", x.docente_id, x.curso_id, x.periodo),
+                docente_id: x.docente_id,
+                curso_id: x.curso_id,
+                periodo: x.periodo,
+                promedio_curso: [],
+                evaluaciones: [],
+                participacion_pct: []
+              };
+            }
+            if (x.calificacion !== null) summaryMap[k].promedio_curso.push(x.calificacion);
+            if (x.evaluaciones !== null) summaryMap[k].evaluaciones.push(x.evaluaciones);
+            if (x.participacion_pct !== null) summaryMap[k].participacion_pct.push(x.participacion_pct);
+          }
+
+          db.evaluacion_resumen = Object.values(summaryMap).map(s => ({
+            evaluacion_resumen_id: s.evaluacion_resumen_id,
+            docente_id: s.docente_id,
+            curso_id: s.curso_id,
+            periodo: s.periodo,
+            promedio_curso: s.promedio_curso.length ? +(s.promedio_curso.reduce((a,b)=>a+b,0)/s.promedio_curso.length).toFixed(4) : null,
+            evaluaciones: s.evaluaciones.length ? Math.max(...s.evaluaciones) : null,
+            participacion_pct: s.participacion_pct.length ? Math.max(...s.participacion_pct) : null
+          }));
+        }
+      }
+
+      if (preguntasSheetName) {
+        const data = sheetToMatrix(wb.Sheets[preguntasSheetName]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+          const iCod = findIndex(h, ["pregunta", "codigo pregunta", "id pregunta", "ítem", "item"]);
+          const iTxt = findIndex(h, ["texto", "descripcion", "descripción", "pregunta texto"]);
+          db.catalogo_preguntas = [];
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const item = cleanText(row[iCod]);
+            const texto = cleanText(row[iTxt]);
+            if (item || texto) {
+              db.catalogo_preguntas.push({
+                pregunta_id: makeId("preg", item || texto),
+                codigo_pregunta: item,
+                texto_pregunta: texto
+              });
+            }
+          }
+        }
+      }
+
+      if (reporteSheetName) {
+        const data = sheetToMatrix(wb.Sheets[reporteSheetName]);
+        db.reporte_global_raw = data.slice(0, 50);
+      }
     }
 
-    async function procesarArchivos() {
-      const input = document.getElementById("files");
+    function parseHistoricoWorkbook(wb, db) {
+      for (const sName of wb.SheetNames) {
+        const data = sheetToMatrix(wb.Sheets[sName]);
+        if (data.length < 2) continue;
+        const h = headerMap(data[0]);
+
+        const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+        const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+        const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+        const iCurso = findIndex(h, ["materia", "curso", "asignatura"]);
+        const iEvals = findIndex(h, ["evaluadores", "evaluaciones", "n evaluaciones", "cantidad"]);
+        const iPercentil = findIndex(h, ["percentil", "percentile"]);
+        const iProm = findIndex(h, ["promedio", "calificacion", "calificación", "nota"]);
+        const iPeriodo = findIndex(h, ["periodo", "período", "intake", "ciclo"]);
+
+        for (let r = 1; r < data.length; r++) {
+          const row = data[r];
+          const ced = looksLikeCedula(row[iCed]);
+          const nom = cleanText(row[iNom]);
+          const docente = ensureDocente(db, ced, nom, { escuela_historico: cleanText(row[iEsc]) });
+          const curso = ensureCurso(db, row[iCurso], "", "", row[iEsc]);
+
+          const reg = {
+            historico_id: makeId("hist", docente?.docente_id, curso?.curso_id, sName, r),
+            hoja: cleanText(sName),
+            docente_id: docente?.docente_id || "",
+            curso_id: curso?.curso_id || "",
+            escuela: cleanText(row[iEsc]) || cleanText(sName),
+            periodo: cleanText(row[iPeriodo]),
+            evaluadores: cleanNumber(row[iEvals]),
+            percentil: cleanNumber(row[iPercentil]),
+            promedio: cleanNumber(row[iProm])
+          };
+
+          const useful =
+            reg.docente_id || reg.curso_id || reg.evaluadores !== null ||
+            reg.percentil !== null || reg.promedio !== null;
+
+          if (useful) db.historico.push(reg);
+        }
+      }
+    }
+
+    function parseAsistenciaWorkbook(wb, db) {
+      const byName = namePart => wb.SheetNames.find(s => norm(s).includes(norm(namePart)));
+
+      const sDoc = byName("asist. docente") || byName("asistencia docente") || byName("docente");
+      const sCurso = byName("asist. curso") || byName("curso");
+      const sHorario = byName("asist. horario") || byName("horario");
+
+      if (sDoc) {
+        const data = sheetToMatrix(wb.Sheets[sDoc]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+          const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+          const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+          const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+          const iAsis = findIndex(h, ["asistencia", "% asistencia", "porcentaje asistencia"]);
+          const iFaltadas = findIndex(h, ["horas faltadas", "faltadas", "horas de falta"]);
+          const iPctFalta = findIndex(h, ["% faltas", "porcentaje faltas", "faltas"]);
+
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const docente = ensureDocente(
+              db,
+              looksLikeCedula(row[iCed]),
+              cleanText(row[iNom]),
+              { escuela_asistencia: cleanText(row[iEsc]) }
+            );
+
+            const reg = {
+              asistencia_docente_id: makeId("ad", docente?.docente_id, r),
+              docente_id: docente?.docente_id || "",
+              escuela: cleanText(row[iEsc]),
+              asistencia_pct: cleanNumber(row[iAsis]),
+              horas_faltadas: cleanNumber(row[iFaltadas]),
+              faltas_pct: cleanNumber(row[iPctFalta])
+            };
+
+            if (reg.docente_id || reg.asistencia_pct !== null || reg.horas_faltadas !== null || reg.faltas_pct !== null) {
+              db.asistencia_docente.push(reg);
+            }
+          }
+        }
+      }
+
+      if (sCurso) {
+        const data = sheetToMatrix(wb.Sheets[sCurso]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+          const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+          const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+          const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+          const iCurso = findIndex(h, ["materia", "curso", "asignatura"]);
+          const iPar = findIndex(h, ["paralelo", "grupo", "seccion", "sección"]);
+          const iAsis = findIndex(h, ["asistencia", "% asistencia", "porcentaje asistencia"]);
+          const iFaltadas = findIndex(h, ["horas faltadas", "faltadas", "horas de falta"]);
+          const iPctFalta = findIndex(h, ["% faltas", "porcentaje faltas", "faltas"]);
+
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const docente = ensureDocente(db, looksLikeCedula(row[iCed]), cleanText(row[iNom]));
+            const curso = ensureCurso(db, row[iCurso], row[iPar], "", row[iEsc]);
+
+            const reg = {
+              asistencia_curso_id: makeId("ac", docente?.docente_id, curso?.curso_id, r),
+              docente_id: docente?.docente_id || "",
+              curso_id: curso?.curso_id || "",
+              escuela: cleanText(row[iEsc]),
+              asistencia_pct: cleanNumber(row[iAsis]),
+              horas_faltadas: cleanNumber(row[iFaltadas]),
+              faltas_pct: cleanNumber(row[iPctFalta])
+            };
+
+            if (reg.docente_id || reg.curso_id || reg.asistencia_pct !== null || reg.horas_faltadas !== null) {
+              db.asistencia_curso.push(reg);
+            }
+          }
+        }
+      }
+
+      if (sHorario) {
+        const data = sheetToMatrix(wb.Sheets[sHorario]);
+        if (data.length > 1) {
+          const h = headerMap(data[0]);
+          const iCed = findIndex(h, ["cedula", "cédula", "identificacion", "identificación"]);
+          const iNom = findIndex(h, ["docente", "nombre", "nombres y apellidos"]);
+          const iEsc = findIndex(h, ["escuela", "carrera", "school"]);
+          const iCurso = findIndex(h, ["materia", "curso", "asignatura"]);
+          const iPar = findIndex(h, ["paralelo", "grupo", "seccion", "sección"]);
+          const iFecha = findIndex(h, ["fecha", "dia", "día"]);
+          const iHora = findIndex(h, ["hora", "horario", "franja"]);
+          const iFalta = findIndex(h, ["faltas", "horas faltadas", "ausencia"]);
+          const iAsis = findIndex(h, ["asistencia", "% asistencia", "porcentaje asistencia"]);
+
+          for (let r = 1; r < data.length; r++) {
+            const row = data[r];
+            const docente = ensureDocente(db, looksLikeCedula(row[iCed]), cleanText(row[iNom]));
+            const curso = ensureCurso(db, row[iCurso], row[iPar], "", row[iEsc]);
+
+            const reg = {
+              asistencia_horario_id: makeId("ah", docente?.docente_id, curso?.curso_id, row[iFecha], row[iHora], r),
+              docente_id: docente?.docente_id || "",
+              curso_id: curso?.curso_id || "",
+              escuela: cleanText(row[iEsc]),
+              fecha: cleanText(row[iFecha]),
+              hora: cleanText(row[iHora]),
+              faltas: cleanNumber(row[iFalta]),
+              asistencia_pct: cleanNumber(row[iAsis])
+            };
+
+            if (reg.docente_id || reg.curso_id || reg.fecha || reg.hora || reg.faltas !== null) {
+              db.asistencia_horario.push(reg);
+            }
+          }
+        }
+      }
+    }
+
+    async function procesar() {
       const status = document.getElementById("status");
-      const output = document.getElementById("output");
-      output.innerHTML = "";
+      const resumen = document.getElementById("resumen");
+      const salida = document.getElementById("salida");
       status.innerHTML = "";
+      resumen.innerHTML = "";
+      salida.innerHTML = "";
 
+      const input = document.getElementById("files");
       const files = Array.from(input.files || []);
+
       if (files.length !== 3) {
-        status.innerHTML = '<p class="error">Debe seleccionar exactamente 3 archivos.</p>';
+        status.innerHTML = '<p class="err">Debe cargar exactamente 3 archivos.</p>';
         return;
       }
 
-      const nombresRecibidos = files.map(f => normalizarNombre(f.name));
-      const faltantes = nombresEsperados.filter(n => !nombresRecibidos.includes(normalizarNombre(n)));
-      const sobrantes = files.filter(f => !nombresEsperados.map(normalizarNombre).includes(normalizarNombre(f.name)));
-
-      if (faltantes.length || sobrantes.length) {
-        status.innerHTML = `
-          <p class="error">Los archivos no coinciden exactamente con los esperados.</p>
-          <p><strong>Faltantes:</strong> ${faltantes.length ? faltantes.map(escapeHTML).join(", ") : "Ninguno"}</p>
-          <p><strong>No válidos:</strong> ${sobrantes.length ? sobrantes.map(f => escapeHTML(f.name)).join(", ") : "Ninguno"}</p>
-        `;
+      const incoming = files.map(f => norm(f.name));
+      const missing = EXPECTED_FILES.filter(n => !incoming.includes(norm(n)));
+      if (missing.length) {
+        status.innerHTML = `<p class="err">Faltan archivos requeridos: ${missing.map(esc).join(", ")}</p>`;
         return;
       }
 
-      status.innerHTML = '<p class="ok">Procesando archivos...</p>';
+      status.innerHTML = '<p class="ok">Procesando y estructurando datos...</p>';
 
-      const ordenados = nombresEsperados.map(nombre =>
-        files.find(f => normalizarNombre(f.name) === normalizarNombre(nombre))
-      );
+      DB = {
+        docentes: [],
+        cursos: [],
+        catalogo_preguntas: [],
+        evaluacion_detalle: [],
+        evaluacion_resumen: [],
+        historico: [],
+        asistencia_docente: [],
+        asistencia_curso: [],
+        asistencia_horario: [],
+        reporte_global_raw: [],
+        _docentesMap: {},
+        _cursosMap: {}
+      };
 
-      let compilado = `
-        <section>
-          <h1>Compilado de documentos Excel</h1>
+      const getFile = name => files.find(f => norm(f.name) === norm(name));
+
+      const wbAsis = await readWorkbook(getFile("Asistencia docente.xlsx"));
+      const wbEval = await readWorkbook(getFile("Evaluación docente individual.xlsx"));
+      const wbHist = await readWorkbook(getFile("Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"));
+
+      parseEvaluacionWorkbook(wbEval, DB);
+      parseHistoricoWorkbook(wbHist, DB);
+      parseAsistenciaWorkbook(wbAsis, DB);
+
+      delete DB._docentesMap;
+      delete DB._cursosMap;
+
+      resumen.innerHTML = `
+        <div class="grid">
           <div class="meta">
-            <strong>Archivos procesados:</strong><br>
-            ${nombresEsperados.map(escapeHTML).join("<br>")}
+            <h3>Conteo de entidades</h3>
+            <div>Docentes: <strong>${DB.docentes.length}</strong></div>
+            <div>Cursos: <strong>${DB.cursos.length}</strong></div>
+            <div>Catálogo preguntas: <strong>${DB.catalogo_preguntas.length}</strong></div>
+            <div>Evaluación detalle: <strong>${DB.evaluacion_detalle.length}</strong></div>
+            <div>Evaluación resumen: <strong>${DB.evaluacion_resumen.length}</strong></div>
+            <div>Histórico: <strong>${DB.historico.length}</strong></div>
+            <div>Asistencia docente: <strong>${DB.asistencia_docente.length}</strong></div>
+            <div>Asistencia curso: <strong>${DB.asistencia_curso.length}</strong></div>
+            <div>Asistencia horario: <strong>${DB.asistencia_horario.length}</strong></div>
           </div>
-        </section>
+          <div class="meta">
+            <h3>Modelo</h3>
+            <div><strong>docentes</strong> ← entidad maestra</div>
+            <div><strong>cursos</strong> ← catálogo de cursos</div>
+            <div><strong>evaluacion_detalle</strong> ← nivel pregunta/registro</div>
+            <div><strong>evaluacion_resumen</strong> ← nivel docente-curso</div>
+            <div><strong>historico</strong> ← percentiles y comparativos</div>
+            <div><strong>asistencia_*</strong> ← tres niveles de granularidad</div>
+          </div>
+        </div>
       `;
 
-      for (const file of ordenados) {
-        const buffer = await leerArchivoComoArrayBuffer(file);
-        const workbook = XLSX.read(buffer, { type: "array" });
+      salida.innerHTML =
+        tableHTML("Tabla: docentes", DB.docentes, 50) +
+        tableHTML("Tabla: cursos", DB.cursos, 50) +
+        tableHTML("Tabla: catalogo_preguntas", DB.catalogo_preguntas, 50) +
+        tableHTML("Tabla: evaluacion_resumen", DB.evaluacion_resumen, 50) +
+        tableHTML("Tabla: evaluacion_detalle", DB.evaluacion_detalle, 50) +
+        tableHTML("Tabla: historico", DB.historico, 50) +
+        tableHTML("Tabla: asistencia_docente", DB.asistencia_docente, 50) +
+        tableHTML("Tabla: asistencia_curso", DB.asistencia_curso, 50) +
+        tableHTML("Tabla: asistencia_horario", DB.asistencia_horario, 50);
 
-        compilado += `<section>`;
-        compilado += `<h2>${escapeHTML(file.name)}</h2>`;
+      status.innerHTML = '<p class="ok">Base estructurada generada correctamente.</p>';
+    }
 
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          const data = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: "",
-            raw: false
-          });
-
-          const filas = data.length;
-          const columnas = data.reduce((max, fila) => Math.max(max, (fila || []).length), 0);
-
-          compilado += `<h3>Hoja: ${escapeHTML(sheetName)}</h3>`;
-          compilado += `
-            <div class="meta">
-              <strong>Filas:</strong> ${filas} |
-              <strong>Columnas:</strong> ${columnas}
-            </div>
-          `;
-          compilado += sheetToHTMLTable(data);
-        }
-
-        compilado += `</section>`;
+    function descargarJSON() {
+      if (!DB) {
+        document.getElementById("status").innerHTML = '<p class="err">Primero debe construir la base.</p>';
+        return;
       }
-
-      output.innerHTML = compilado;
-      status.innerHTML = '<p class="ok">Compilación completada.</p>';
+      const blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "base_estructurada.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function descargarHTML() {
-      const contenido = document.getElementById("output").innerHTML;
-
-      if (!contenido.trim()) {
-        document.getElementById("status").innerHTML = '<p class="error">Primero debe compilar los archivos.</p>';
+      if (!DB) {
+        document.getElementById("status").innerHTML = '<p class="err">Primero debe construir la base.</p>';
         return;
       }
 
-      const documentoCompleto = `
+      const html = `
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Compilado de documentos Excel</title>
+  <title>Base estructurada consolidada</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
-    h1, h2, h3 { margin-top: 28px; }
-    table { border-collapse: collapse; width: 100%; margin: 12px 0 28px 0; font-size: 12px; }
-    th, td { border: 1px solid #999; padding: 6px; vertical-align: top; text-align: left; }
+    body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
+    h1, h2, h3 { margin: 16px 0 8px; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; font-size: 12px; }
+    th, td { border: 1px solid #bbb; padding: 6px; text-align: left; vertical-align: top; }
     th { background: #efefef; }
-    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 16px 0; font-size: 13px; }
+    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; font-size: 12px; }
   </style>
 </head>
 <body>
-${contenido}
+  <h1>Base estructurada consolidada</h1>
+  <div class="meta">
+    <div>Docentes: ${DB.docentes.length}</div>
+    <div>Cursos: ${DB.cursos.length}</div>
+    <div>Evaluación detalle: ${DB.evaluacion_detalle.length}</div>
+    <div>Evaluación resumen: ${DB.evaluacion_resumen.length}</div>
+    <div>Histórico: ${DB.historico.length}</div>
+    <div>Asistencia docente: ${DB.asistencia_docente.length}</div>
+    <div>Asistencia curso: ${DB.asistencia_curso.length}</div>
+    <div>Asistencia horario: ${DB.asistencia_horario.length}</div>
+  </div>
+  <h2>JSON consolidado</h2>
+  <pre>${esc(JSON.stringify(DB, null, 2))}</pre>
 </body>
 </html>`.trim();
 
-      const blob = new Blob([documentoCompleto], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "compilado_documentos.html";
+      a.href = URL.createObjectURL(blob);
+      a.download = "base_estructurada_consolidada.html";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     }
   </script>
 </body>
