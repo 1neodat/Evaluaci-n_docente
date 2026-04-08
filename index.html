@@ -1,134 +1,372 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte Compilado de Datos</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f4f7f6;
-        }
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-            border-bottom: 3px solid #2e7d32;
-            padding-bottom: 20px;
-        }
-        h1 { color: #2e7d32; margin-bottom: 5px; }
-        .date { color: #666; font-style: italic; }
-        
-        .section-card {
-            background: #fff;
-            padding: 25px;
-            margin-bottom: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h2 { 
-            color: #1b5e20; 
-            border-left: 5px solid #2e7d32; 
-            padding-left: 15px;
-            margin-top: 0;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid #ddd;
-        }
-        th {
-            background-color: #f1f8e9;
-            color: #2e7d32;
-            text-transform: uppercase;
-            font-size: 0.9em;
-        }
-        tr:hover { background-color: #f9f9f9; }
-        
-        .footer {
-            text-align: center;
-            margin-top: 50px;
-            font-size: 0.8em;
-            color: #888;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base completa sin pérdida</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
+    h1, h2, h3 { margin: 16px 0 8px; }
+    .panel { border: 1px solid #ccc; padding: 16px; margin-bottom: 16px; background: #f8f8f8; }
+    .ok { color: #0a7a0a; font-weight: bold; }
+    .err { color: #b30000; font-weight: bold; }
+    button { padding: 10px 14px; margin-right: 8px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; font-size: 12px; }
+    th, td { border: 1px solid #bbb; padding: 6px; text-align: left; vertical-align: top; }
+    th { background: #efefef; }
+    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  </style>
 </head>
 <body>
+  <h1>Compilación completa sin pérdida de información</h1>
 
-<header>
-    <h1>Compilado General de Documentos</h1>
-    <p class="date">Reporte generado el: 8 de abril de 2026</p>
-</header>
+  <div class="panel">
+    <p>Cargue exactamente estos tres archivos:</p>
+    <ul>
+      <li>Asistencia docente.xlsx</li>
+      <li>Evaluación docente individual.xlsx</li>
+      <li>Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx</li>
+    </ul>
 
-<section class="section-card">
-    <h2>Documento 1: Inventario de Activos</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Código ID</th>
-                <th>Descripción</th>
-                <th>Cantidad</th>
-                <th>Estado</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>#001</td>
-                <td>Laptop Corporativa</td>
-                <td>15</td>
-                <td>Operativo</td>
-            </tr>
-            <tr>
-                <td>#002</td>
-                <td>Monitor 27"</td>
-                <td>30</td>
-                <td>En mantenimiento</td>
-            </tr>
-        </tbody>
-    </table>
-</section>
+    <input type="file" id="files" multiple accept=".xlsx,.xls" />
+    <br><br>
+    <button onclick="procesar()">Procesar</button>
+    <button onclick="descargarJSON()">Descargar JSON completo</button>
+    <button onclick="descargarHTML()">Descargar HTML compilado</button>
+    <div id="status"></div>
+  </div>
 
-<section class="section-card">
-    <h2>Documento 2: Registro de Ventas</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Producto</th>
-                <th>Total ($)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>2026-04-01</td>
-                <td>Distribuidora Global</td>
-                <td>Software Licencia v3</td>
-                <td>$1,200.00</td>
-            </tr>
-            <tr>
-                <td>2026-04-05</td>
-                <td>TecnoSistemas S.A.</td>
-                <td>Soporte Técnico</td>
-                <td>$450.00</td>
-            </tr>
-        </tbody>
-    </table>
-</section>
+  <div id="resumen"></div>
+  <div id="salida"></div>
 
-<div class="footer">
-    <p>Fin del documento compilado - Generado automáticamente</p>
-</div>
+  <script>
+    const EXPECTED_FILES = [
+      "Asistencia docente.xlsx",
+      "Evaluación docente individual.xlsx",
+      "Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"
+    ];
 
+    let DB = null;
+
+    function esc(v) {
+      return String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function norm(s) {
+      return String(s ?? "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function cleanText(v) {
+      if (v === null || v === undefined) return "";
+      return String(v);
+    }
+
+    function tableHTML(title, rows, limit = 50) {
+      if (!rows || !rows.length) {
+        return `<h3>${esc(title)}</h3><div class="meta">Sin registros</div>`;
+      }
+      const cols = Object.keys(rows[0]);
+      const body = rows.slice(0, limit).map(r =>
+        "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") + "</tr>"
+      ).join("");
+      return `
+        <h3>${esc(title)}</h3>
+        <div class="meta">Registros: ${rows.length}${rows.length > limit ? ` | Mostrando primeros ${limit}` : ""}</div>
+        <table>
+          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
+
+    async function readWorkbook(file) {
+      const ab = await file.arrayBuffer();
+      return XLSX.read(ab, {
+        type: "array",
+        cellFormula: true,
+        cellHTML: true,
+        cellNF: true,
+        cellStyles: true,
+        sheetStubs: true
+      });
+    }
+
+    function buildStructuredViews(db) {
+      const structured = {
+        files_summary: [],
+        sheets_summary: [],
+        possible_headers: [],
+        row_lengths: []
+      };
+
+      for (const f of db.raw_files) {
+        structured.files_summary.push({
+          file_id: f.file_id,
+          file_name: f.file_name,
+          sheet_count: db.raw_sheets.filter(s => s.file_id === f.file_id).length
+        });
+      }
+
+      for (const s of db.raw_sheets) {
+        structured.sheets_summary.push({
+          sheet_id: s.sheet_id,
+          file_id: s.file_id,
+          file_name: s.file_name,
+          sheet_name: s.sheet_name,
+          range: s.range,
+          max_row_index: s.max_row_index,
+          max_col_index: s.max_col_index,
+          cell_count: db.raw_cells.filter(c => c.sheet_id === s.sheet_id).length,
+          row_count: db.raw_rows.filter(r => r.sheet_id === s.sheet_id).length
+        });
+      }
+
+      for (const r of db.raw_rows) {
+        if (r.row_index <= 4) {
+          structured.possible_headers.push({
+            sheet_id: r.sheet_id,
+            file_name: r.file_name,
+            sheet_name: r.sheet_name,
+            row_index: r.row_index,
+            values: JSON.stringify(r.values)
+          });
+        }
+        structured.row_lengths.push({
+          sheet_id: r.sheet_id,
+          file_name: r.file_name,
+          sheet_name: r.sheet_name,
+          row_index: r.row_index,
+          cell_count: Array.isArray(r.values) ? r.values.length : 0
+        });
+      }
+
+      db.structured_views = structured;
+    }
+
+    async function procesar() {
+      const status = document.getElementById("status");
+      const resumen = document.getElementById("resumen");
+      const salida = document.getElementById("salida");
+
+      status.innerHTML = "";
+      resumen.innerHTML = "";
+      salida.innerHTML = "";
+
+      const input = document.getElementById("files");
+      const files = Array.from(input.files || []);
+
+      if (files.length !== 3) {
+        status.innerHTML = '<p class="err">Debe cargar exactamente 3 archivos.</p>';
+        return;
+      }
+
+      const incoming = files.map(f => norm(f.name));
+      const missing = EXPECTED_FILES.filter(n => !incoming.includes(norm(n)));
+      const invalid = files.filter(f => !EXPECTED_FILES.map(norm).includes(norm(f.name)));
+
+      if (missing.length || invalid.length) {
+        status.innerHTML = `
+          <p class="err">Los archivos no coinciden exactamente.</p>
+          <p><strong>Faltantes:</strong> ${missing.length ? missing.map(esc).join(", ") : "Ninguno"}</p>
+          <p><strong>No válidos:</strong> ${invalid.length ? invalid.map(f => esc(f.name)).join(", ") : "Ninguno"}</p>
+        `;
+        return;
+      }
+
+      status.innerHTML = '<p class="ok">Procesando sin pérdida de información...</p>';
+
+      DB = {
+        raw_files: [],
+        raw_sheets: [],
+        raw_rows: [],
+        raw_cells: [],
+        structured_views: {}
+      };
+
+      let globalFileIndex = 0;
+      let globalSheetIndex = 0;
+
+      for (const expectedName of EXPECTED_FILES) {
+        const file = files.find(f => norm(f.name) === norm(expectedName));
+        const wb = await readWorkbook(file);
+
+        const file_id = "file_" + (++globalFileIndex);
+
+        DB.raw_files.push({
+          file_id,
+          file_name: file.name,
+          size_bytes: file.size,
+          last_modified_epoch: file.lastModified
+        });
+
+        for (const sheetName of wb.SheetNames) {
+          const sheet = wb.Sheets[sheetName];
+          const sheet_id = "sheet_" + (++globalSheetIndex);
+          const ref = sheet["!ref"] || "A1:A1";
+          const range = XLSX.utils.decode_range(ref);
+
+          DB.raw_sheets.push({
+            sheet_id,
+            file_id,
+            file_name: file.name,
+            sheet_name: sheetName,
+            range: ref,
+            max_row_index: range.e.r,
+            max_col_index: range.e.c
+          });
+
+          const matrix = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: null,
+            raw: false,
+            blankrows: true
+          });
+
+          for (let r = 0; r < matrix.length; r++) {
+            DB.raw_rows.push({
+              row_id: `${sheet_id}_row_${r}`,
+              sheet_id,
+              file_id,
+              file_name: file.name,
+              sheet_name: sheetName,
+              row_index: r,
+              values: matrix[r]
+            });
+          }
+
+          for (let R = range.s.r; R <= range.e.r; R++) {
+            for (let C = range.s.c; C <= range.e.c; C++) {
+              const addr = XLSX.utils.encode_cell({ r: R, c: C });
+              const cell = sheet[addr] || null;
+
+              DB.raw_cells.push({
+                cell_id: `${sheet_id}_${addr}`,
+                sheet_id,
+                file_id,
+                file_name: file.name,
+                sheet_name: sheetName,
+                address: addr,
+                row_index: R,
+                col_index: C,
+                type: cell ? (cell.t ?? null) : null,
+                formula: cell ? (cell.f ?? null) : null,
+                raw_value: cell ? (cell.v ?? null) : null,
+                display_value: cell ? (cell.w ?? null) : null,
+                number_format: cell ? (cell.z ?? null) : null,
+                html_value: cell ? (cell.h ?? null) : null
+              });
+            }
+          }
+        }
+      }
+
+      buildStructuredViews(DB);
+
+      resumen.innerHTML = `
+        <div class="grid">
+          <div class="meta">
+            <h3>Contenido preservado</h3>
+            <div>Archivos: <strong>${DB.raw_files.length}</strong></div>
+            <div>Hojas: <strong>${DB.raw_sheets.length}</strong></div>
+            <div>Filas crudas: <strong>${DB.raw_rows.length}</strong></div>
+            <div>Celdas crudas: <strong>${DB.raw_cells.length}</strong></div>
+          </div>
+          <div class="meta">
+            <h3>Estructura</h3>
+            <div><strong>raw_files</strong>: metadatos de archivo</div>
+            <div><strong>raw_sheets</strong>: metadatos de hoja</div>
+            <div><strong>raw_rows</strong>: filas completas</div>
+            <div><strong>raw_cells</strong>: todas las celdas</div>
+            <div><strong>structured_views</strong>: índices sin alterar el original</div>
+          </div>
+        </div>
+      `;
+
+      salida.innerHTML =
+        tableHTML("raw_files", DB.raw_files, 20) +
+        tableHTML("raw_sheets", DB.raw_sheets, 50) +
+        tableHTML("structured_views.files_summary", DB.structured_views.files_summary, 20) +
+        tableHTML("structured_views.sheets_summary", DB.structured_views.sheets_summary, 50) +
+        tableHTML("structured_views.possible_headers", DB.structured_views.possible_headers, 50) +
+        tableHTML("raw_rows", DB.raw_rows, 30) +
+        tableHTML("raw_cells", DB.raw_cells, 50);
+
+      status.innerHTML = '<p class="ok">Compilación completa generada sin pérdida.</p>';
+    }
+
+    function descargarJSON() {
+      if (!DB) {
+        document.getElementById("status").innerHTML = '<p class="err">Primero debe procesar los archivos.</p>';
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(DB, null, 2)], {
+        type: "application/json;charset=utf-8"
+      });
+
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "base_completa_sin_perdida.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function descargarHTML() {
+      if (!DB) {
+        document.getElementById("status").innerHTML = '<p class="err">Primero debe procesar los archivos.</p>';
+        return;
+      }
+
+      const contenido = `
+        <h1>Base completa sin pérdida</h1>
+        <div class="meta">
+          <div>Archivos: ${DB.raw_files.length}</div>
+          <div>Hojas: ${DB.raw_sheets.length}</div>
+          <div>Filas crudas: ${DB.raw_rows.length}</div>
+          <div>Celdas crudas: ${DB.raw_cells.length}</div>
+        </div>
+        <h2>JSON consolidado completo</h2>
+        <pre>${esc(JSON.stringify(DB, null, 2))}</pre>
+      `;
+
+      const fullHTML = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Base completa sin pérdida</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; color: #222; }
+    .meta { background: #fafafa; border: 1px solid #ddd; padding: 8px; margin: 8px 0 12px; }
+    pre { background: #111; color: #eee; padding: 12px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+${contenido}
+</body>
+</html>`.trim();
+
+      const blob = new Blob([fullHTML], { type: "text/html;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "base_completa_sin_perdida.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
 </body>
 </html>
