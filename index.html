@@ -3,594 +3,636 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Base compilada íntegra v3</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <title>Informe Resultados de Evaluación Docente</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 18px; color: #202124; }
-    h1, h2 { margin: 10px 0; }
-    .panel { border: 1px solid #d7d7d7; background: #f7f7f7; padding: 14px; margin-bottom: 14px; }
-    .ok { color: #0b6b0b; font-weight: 700; }
-    .err { color: #a40000; font-weight: 700; }
-    .grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
-    label { display: block; font-size: 12px; margin-bottom: 4px; }
-    input, select, button { width: 100%; box-sizing: border-box; padding: 8px; }
-    button { width: auto; margin-right: 8px; cursor: pointer; }
-    table { border-collapse: collapse; width: 100%; font-size: 12px; background: white; }
-    th, td { border: 1px solid #d0d0d0; padding: 6px; text-align: left; vertical-align: top; }
-    th { background: #efefef; position: sticky; top: 0; z-index: 1; }
-    .wrap { max-height: 560px; overflow: auto; border: 1px solid #d0d0d0; }
-    .muted { color: #666; font-size: 12px; }
-    .kpis { display:flex; flex-wrap: wrap; gap:8px; margin:8px 0; }
-    .kpi { background:white; border:1px solid #d0d0d0; padding:6px 10px; font-size:12px; }
-    .hidden { display:none; }
-    code { background:#efefef; padding:1px 4px; }
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f3f3f3;
+      color: #111;
+    }
+
+    .page {
+      width: 1100px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 40px 50px 60px;
+      position: relative;
+      border: 1px solid #ddd;
+    }
+
+    .top-corner {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 140px;
+      height: 140px;
+      border-top: 3px solid #d6a63c;
+      border-right: 3px solid #d6a63c;
+      border-bottom: 3px solid #d6a63c;
+      border-left: none;
+      border-radius: 0 0 0 90px;
+      opacity: 0.8;
+    }
+
+    .logo {
+      font-size: 56px;
+      font-weight: 700;
+      color: #c98aa4;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .logo small {
+      display: block;
+      font-size: 18px;
+      color: #c98aa4;
+      margin-top: 6px;
+      font-weight: 600;
+    }
+
+    .title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 28px;
+      margin: 25px 0 30px;
+      text-transform: uppercase;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+      padding: 18px;
+      border: 1px solid #ccc;
+      background: #fafafa;
+    }
+
+    .control-group label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .control-group select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 1px solid #999;
+      background: #fff;
+    }
+
+    .meta p {
+      margin: 4px 0;
+      font-size: 16px;
+    }
+
+    .meta strong {
+      font-weight: 700;
+    }
+
+    .line {
+      border-bottom: 2px solid #111;
+      margin: 8px 0 18px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 22px 0 10px;
+      text-transform: uppercase;
+    }
+
+    .paragraph {
+      font-size: 15px;
+      text-align: justify;
+      margin: 0 0 12px;
+    }
+
+    .table-wrap {
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid #111;
+      padding: 6px 8px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #eaeaea;
+      font-weight: 700;
+    }
+
+    .left {
+      text-align: left;
+    }
+
+    .summary-row td {
+      font-weight: 700;
+      background: #f3f3f3;
+    }
+
+    .muted-empty {
+      color: #777;
+    }
+
+    .actions {
+      margin-top: 22px;
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    button {
+      padding: 10px 16px;
+      border: 1px solid #333;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #f2f2f2;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .controls,
+      .actions {
+        display: none !important;
+      }
+
+      .page {
+        width: auto;
+        margin: 0;
+        border: none;
+        padding: 30px 40px 40px;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Base compilada íntegra v3</h1>
+  <div class="page">
+    <div class="top-corner"></div>
 
-  <div class="panel">
-    <div>Esta versión no elimina columnas. Cada fila conserva:</div>
-    <ul>
-      <li>campos estándar para filtrar</li>
-      <li>todas las columnas originales de la hoja</li>
-      <li>fila cruda completa en JSON</li>
-      <li>metadatos de encabezado usados para interpretar la hoja</li>
-    </ul>
-    <div>Archivos requeridos:</div>
-    <ul>
-      <li>Asistencia docente.xlsx</li>
-      <li>Evaluación docente individual.xlsx</li>
-      <li>Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx</li>
-    </ul>
-    <input type="file" id="files" multiple accept=".xlsx,.xls" />
-    <div style="margin-top:10px;">
-      <button onclick="procesar()">Compilar base</button>
-      <button onclick="exportarCSV()">Exportar CSV</button>
-      <button onclick="exportarJSON()">Exportar JSON</button>
+    <div class="logo">
+      UIDE
+      <small>Powered by Arizona State University</small>
     </div>
-    <div id="status" style="margin-top:10px;"></div>
-  </div>
 
-  <div id="resumen" class="panel hidden"></div>
-
-  <div id="filtros" class="panel hidden">
-    <h2>Filtros</h2>
-    <div class="grid">
-      <div><label>Archivo</label><select id="f_archivo"></select></div>
-      <div><label>Hoja</label><select id="f_hoja"></select></div>
-      <div><label>Carrera</label><select id="f_carrera"></select></div>
-      <div><label>Docente</label><select id="f_docente"></select></div>
-      <div><label>Cédula</label><input id="f_cedula"></div>
-      <div><label>Materia</label><select id="f_materia"></select></div>
-      <div><label>Pregunta</label><select id="f_pregunta"></select></div>
-      <div><label>Tipo de registro</label><select id="f_tipo_registro"></select></div>
-      <div><label>Periodo</label><input id="f_periodo"></div>
-      <div><label>Columna adicional</label><select id="f_columna_extra"></select></div>
-      <div><label>Valor columna adicional</label><input id="f_valor_extra"></div>
-      <div><label>Texto libre</label><input id="f_texto"></div>
+    <div class="title">
+      INFORME RESULTADOS DE EVALUACIÓN DOCENTE<br />
+      PERIODO ACADÉMICO OCTUBRE 2025 - FEBRERO 2026
     </div>
-    <div style="margin-top:10px;">
-      <button onclick="aplicarFiltros()">Aplicar filtros</button>
-      <button onclick="limpiarFiltros()">Limpiar filtros</button>
-    </div>
-    <div class="muted" style="margin-top:8px;">La tabla final es <code>base_general</code>. No se descartan columnas de origen; se agregan a la base como columnas dinámicas.</div>
-  </div>
 
-  <div id="vista" class="panel hidden">
-    <h2>Vista previa</h2>
-    <div id="stats" class="kpis"></div>
-    <div class="muted" id="columnasInfo"></div>
-    <div class="wrap" style="margin-top:10px;">
-      <table id="tabla">
-        <thead></thead>
-        <tbody></tbody>
+    <div class="controls">
+      <div class="control-group">
+        <label for="docenteSelect">Docente</label>
+        <select id="docenteSelect">
+          <option value="">Seleccione un docente</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="carreraSelect">Carrera</label>
+        <select id="carreraSelect" disabled>
+          <option value="">Seleccione una carrera</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="cursoSelect">Curso</label>
+        <select id="cursoSelect" disabled>
+          <option value="">Seleccione un curso</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="meta">
+      <p>
+        <strong>Para:</strong>
+        <span id="out-docente" class="muted-empty"></span>,
+        Docente de la carrera de
+        <span id="out-carrera" class="muted-empty"></span>,
+        Business School UIDE-Loja
+      </p>
+
+      <p>
+        <strong>De:</strong>
+        <span id="out-coordinador" class="muted-empty"></span>,
+        Coordinador de la carrera de
+        <span id="out-carrera-2" class="muted-empty"></span>,
+        Business School UIDE-Loja
+      </p>
+
+      <p><strong>Fecha:</strong> <span id="out-fecha">06-04-2025</span></p>
+
+      <p>
+        <strong>Asunto:</strong>
+        Resultados de Evaluación Docente PAO octubre 2025 – febrero 2026
+      </p>
+
+      <div class="line"></div>
+    </div>
+
+    <div class="section-title">ANTECEDENTES.</div>
+
+    <p class="paragraph">
+      Este informe individual de evaluación docente de la Business School — Campus Loja
+      se sustenta en el Procedimiento TH-GD-P-01 de la UIDE, que define el objetivo de
+      evaluar el desempeño del personal académico y su alcance para pregrado y posgrado
+      en modalidades presencial y en línea, e incorpora un sistema de seguimiento aplicado
+      antes de finalizar cada período académico.
+    </p>
+
+    <p class="paragraph">
+      La Coordinación Académica de la carrera de
+      <span id="out-carrera-3" class="muted-empty"></span>
+      da a conocer el resultado de heteroevaluación al docente, período académico ordinario
+      Oct/2025 - Feb/2026 de las asignaturas a su cargo.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ASIGNATURA</th>
+            <th>P1</th>
+            <th>P2</th>
+            <th>P3</th>
+            <th>P4</th>
+            <th>P5</th>
+            <th>P6</th>
+            <th>P7</th>
+            <th>P8</th>
+            <th>PROMEDIO / 5 PUNTOS</th>
+          </tr>
+        </thead>
+        <tbody id="tablaBody">
+          <tr>
+            <td id="out-asignatura" class="left muted-empty"></td>
+            <td id="out-p1"></td>
+            <td id="out-p2"></td>
+            <td id="out-p3"></td>
+            <td id="out-p4"></td>
+            <td id="out-p5"></td>
+            <td id="out-p6"></td>
+            <td id="out-p7"></td>
+            <td id="out-p8"></td>
+            <td id="out-promedio"></td>
+          </tr>
+          <tr class="summary-row">
+            <td colspan="9">PROMEDIO TODAS ASIGNATURAS / 5 PUNTOS</td>
+            <td id="out-promedio-todas"></td>
+          </tr>
+          <tr class="summary-row">
+            <td colspan="9">PROMEDIO TOTAL SOBRE 100 PUNTOS</td>
+            <td id="out-promedio-100"></td>
+          </tr>
+        </tbody>
       </table>
     </div>
+
+    <p class="paragraph" style="margin-top: 16px;">
+      Los parámetros (P1 ... P8) son los siguientes:
+    </p>
+
+    <ol style="font-size: 14px; line-height: 1.5; margin-top: 0;">
+      <li>Dominio de la asignatura.</li>
+      <li>Evaluación clara y retroalimentación objetiva.</li>
+      <li>Utiliza metodologías prácticas y herramientas tecnológicas.</li>
+      <li>Es accesible y responde con claridad, coherencia y disposición.</li>
+      <li>Incluye ejemplos internacionales y contenido con alcance global.</li>
+      <li>Es flexible, respeta las ideas y la diversidad de los estudiantes.</li>
+      <li>Comunica y cumple la planificación del sílabo.</li>
+      <li>Manifiesta compromiso al cumplir las normas y plazos académicos.</li>
+    </ol>
+
+    <div class="actions">
+      <button type="button" id="btnLimpiar">Limpiar selección</button>
+      <button type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+    </div>
   </div>
 
-<script>
-const REQUIRED = [
-  "Asistencia docente.xlsx",
-  "Evaluación docente individual.xlsx",
-  "Histórico evaluación docente Campus Loja - Intake 2 2025.xlsx"
-];
+  <script>
+    /*
+      REEMPLACE ESTE ARREGLO CON LOS DATOS EXPORTADOS DESDE EXCEL.
 
-const BASE_FIELDS = [
-  "_archivo","_hoja","_fila_excel","_tipo_registro","_header_row","_header_strategy",
-  "carrera","docente","cedula","materia","paralelo",
-  "codigo_curso","codigo_evaluacion","periodo",
-  "pregunta","pregunta_texto",
-  "valor_numerico","valor_texto","evaluadores","participacion_pct","percentil",
-  "fecha","hora","_raw_row_json"
-];
+      Columnas esperadas:
+      - docente
+      - carrera
+      - curso
+      - coordinador
+      - p1
+      - p2
+      - p3
+      - p4
+      - p5
+      - p6
+      - p7
+      - p8
 
-const SYNONYMS = {
-  carrera: ["carrera","escuela","facultad","school","programa","area","área"],
-  docente: ["docente","nombre docente","docente nombre","nombre","nombres y apellidos","profesor","teacher"],
-  cedula: ["cedula","cédula","identificacion","identificación","dni","documento"],
-  materia: ["materia","asignatura","curso","nombre materia","nombre curso","subject"],
-  paralelo: ["paralelo","grupo","seccion","sección"],
-  codigo_curso: ["codigo curso","código curso","curso id","id curso","nrc","codigo","código"],
-  codigo_evaluacion: ["codigo evaluacion","código evaluación","id evaluacion","id evaluación","evaluacion id","codigoevaluacion"],
-  periodo: ["periodo","período","intake","ciclo","semestre","periodo lectivo","periodolectivo"],
-  pregunta: ["pregunta","item","ítem","codigo pregunta","código pregunta","id pregunta","codigopregunta"],
-  pregunta_texto: ["texto pregunta","pregunta texto","descripcion pregunta","descripción pregunta","enunciado","texto","descripcion","descripción"],
-  valor_numerico: ["calificacion","calificación","promedio","nota","valor","score","asistencia","porcentaje asistencia","% asistencia","faltas","horas faltadas","percentil"],
-  valor_texto: ["observacion","observación","comentario","detalle","estado","respuesta"],
-  evaluadores: ["evaluadores","evaluaciones","n evaluaciones","numero evaluaciones","número evaluaciones","cantidad"],
-  participacion_pct: ["participacion","participación","% participacion","% participación","pctevaluacion","pctevaluaciontotal"],
-  percentil: ["percentil","percentile"],
-  fecha: ["fecha","dia","día"],
-  hora: ["hora","horario","franja"]
-};
+      Puede tener varias filas por docente y carrera, una por curso.
+    */
+    const datos = [
+      {
+        docente: "JARAMILLO CARRION ENMA DEL CISNE",
+        carrera: "NEGOCIOS INTERNACIONALES - LOJA",
+        curso: "COMPORTAMIENTO DINAMICO ORGANIZACIONAL - 4-NGIL-A",
+        coordinador: "Mgtr. ...",
+        p1: 4.54,
+        p2: 4.54,
+        p3: 4.38,
+        p4: 4.46,
+        p5: 4.38,
+        p6: 4.54,
+        p7: 4.38,
+        p8: 4.54
+      },
+      {
+        docente: "JARAMILLO CARRION ENMA DEL CISNE",
+        carrera: "NEGOCIOS INTERNACIONALES - LOJA",
+        curso: "LIDERAZGO EN INNOVACION ORGANIZACIONAL - 4-NGIL-A",
+        coordinador: "Mgtr. ...",
+        p1: 4.36,
+        p2: 4.27,
+        p3: 4.27,
+        p4: 4.27,
+        p5: 4.45,
+        p6: 4.45,
+        p7: 4.55,
+        p8: 4.50
+      },
+      {
+        docente: "CUEVA JARAMILLO HENRI APOLO",
+        carrera: "MARKETING - LOJA",
+        curso: "FUNDAMENTOS DE MARKETING - 3-MKT-A",
+        coordinador: "Mgtr. ...",
+        p1: 4.20,
+        p2: 4.18,
+        p3: 4.25,
+        p4: 4.30,
+        p5: 4.10,
+        p6: 4.22,
+        p7: 4.28,
+        p8: 4.31
+      }
+    ];
 
-let baseGeneral = [];
-let baseFiltrada = [];
-let allColumns = [];
+    const docenteSelect = document.getElementById("docenteSelect");
+    const carreraSelect = document.getElementById("carreraSelect");
+    const cursoSelect = document.getElementById("cursoSelect");
+    const btnLimpiar = document.getElementById("btnLimpiar");
 
-function norm(v) {
-  return String(v ?? "")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/\s+/g, " ").trim();
-}
+    const outDocente = document.getElementById("out-docente");
+    const outCarrera = document.getElementById("out-carrera");
+    const outCarrera2 = document.getElementById("out-carrera-2");
+    const outCarrera3 = document.getElementById("out-carrera-3");
+    const outCoordinador = document.getElementById("out-coordinador");
 
-function esc(v) {
-  return String(v ?? "")
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
+    const outAsignatura = document.getElementById("out-asignatura");
+    const outP1 = document.getElementById("out-p1");
+    const outP2 = document.getElementById("out-p2");
+    const outP3 = document.getElementById("out-p3");
+    const outP4 = document.getElementById("out-p4");
+    const outP5 = document.getElementById("out-p5");
+    const outP6 = document.getElementById("out-p6");
+    const outP7 = document.getElementById("out-p7");
+    const outP8 = document.getElementById("out-p8");
+    const outPromedio = document.getElementById("out-promedio");
+    const outPromedioTodas = document.getElementById("out-promedio-todas");
+    const outPromedio100 = document.getElementById("out-promedio-100");
 
-function cleanText(v) {
-  if (v === null || v === undefined) return "";
-  return String(v).replace(/\s+/g, " ").trim();
-}
+    function uniqueValues(items, key) {
+      return [...new Set(items.map(item => item[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+    }
 
-function cleanNumber(v) {
-  if (v === null || v === undefined || v === "") return null;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  let s = String(v).trim();
-  if (!s) return null;
-  s = s.replace(/%/g,"").replace(/\s/g,"");
-  if (/^\d{1,3}(\.\d{3})*,\d+$/.test(s)) s = s.replace(/\./g,"").replace(",",".");
-  else if (/^\d+,\d+$/.test(s)) s = s.replace(",",".");
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
+    function clearOptions(select, placeholder) {
+      select.innerHTML = "";
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = placeholder;
+      select.appendChild(option);
+    }
 
-function looksLikeCedula(v) {
-  const s = String(v ?? "").replace(/\D/g,"");
-  return s.length >= 8 && s.length <= 13 ? s : "";
-}
-
-function slugHeader(v, fallback) {
-  const s = norm(v).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g,"");
-  return s || fallback;
-}
-
-function readWorkbook(file) {
-  return file.arrayBuffer().then(ab => XLSX.read(ab, { type: "array", raw: false }));
-}
-
-function validateFiles(files) {
-  const names = files.map(f => norm(f.name));
-  const missing = REQUIRED.filter(n => !names.includes(norm(n)));
-  const invalid = files.filter(f => !REQUIRED.map(norm).includes(norm(f.name)));
-  return { missing, invalid };
-}
-
-function nonEmptyCount(row) {
-  return (row || []).filter(v => cleanText(v) !== "").length;
-}
-
-function detectHeaderRowGeneral(matrix) {
-  let best = 0, bestScore = -1;
-  const scan = Math.min(matrix.length, 15);
-  for (let r = 0; r < scan; r++) {
-    const row = (matrix[r] || []).map(cleanText);
-    const filled = nonEmptyCount(row);
-    if (!filled) continue;
-    const joined = norm(row.join(" | "));
-    let score = filled * 0.15;
-    for (const key of Object.keys(SYNONYMS)) {
-      for (const alias of SYNONYMS[key]) {
-        if (joined.includes(norm(alias))) { score += 3; break; }
+    function setText(el, value) {
+      el.textContent = value ?? "";
+      if (value === null || value === undefined || value === "") {
+        el.classList.add("muted-empty");
+      } else {
+        el.classList.remove("muted-empty");
       }
     }
-    if (score > bestScore) { best = r; bestScore = score; }
-  }
-  return best;
-}
 
-function flattenHeaders(fileName, sheetName, matrix) {
-  const f = norm(fileName), s = norm(sheetName);
-
-  if (f.includes("historico")) {
-    const row0 = (matrix[0] || []).map(cleanText);
-    const row1 = (matrix[1] || []).map(cleanText);
-    const maxLen = Math.max(row0.length, row1.length);
-    const headers = [];
-    for (let i = 0; i < maxLen; i++) {
-      const top = row0[i] || "";
-      const bot = row1[i] || "";
-      const label = [top, bot].filter(Boolean).join(" | ");
-      headers.push(label || ("col_" + (i + 1)));
+    function formatNumber(value) {
+      if (value === null || value === undefined || value === "") return "";
+      const num = Number(value);
+      if (Number.isNaN(num)) return "";
+      return num.toFixed(2).replace(".", ",");
     }
-    return { headerRow: 1, dataStart: 2, headers, strategy: "historico_2_filas" };
-  }
 
-  const hr = detectHeaderRowGeneral(matrix);
-  const headers = (matrix[hr] || []).map((v, i) => cleanText(v) || ("col_" + (i + 1)));
-  return { headerRow: hr, dataStart: hr + 1, headers, strategy: "simple" };
-}
+    function calcularPromedioFila(registro) {
+      const valores = [
+        registro.p1, registro.p2, registro.p3, registro.p4,
+        registro.p5, registro.p6, registro.p7, registro.p8
+      ].map(Number).filter(v => !Number.isNaN(v));
 
-function detectTipoRegistro(fileName, sheetName) {
-  const f = norm(fileName), s = norm(sheetName);
-  if (f.includes("asistencia")) {
-    if (s.includes("horario")) return "asistencia_horario";
-    if (s.includes("curso")) return "asistencia_curso";
-    return "asistencia_docente";
-  }
-  if (f.includes("historico")) return "historico";
-  if (f.includes("evaluacion")) return "evaluacion_docente";
-  return "general";
-}
-
-function buildHeaderIndex(header) {
-  const idx = {};
-  header.forEach((h, i) => { idx[norm(h)] = i; });
-  return idx;
-}
-
-function pickIndex(idx, aliases) {
-  for (const a of aliases) {
-    const k = norm(a);
-    if (k in idx) return idx[k];
-  }
-  return -1;
-}
-
-function extractCanonical(row, hidx) {
-  const out = {};
-  for (const [field, aliases] of Object.entries(SYNONYMS)) {
-    const i = pickIndex(hidx, aliases);
-    out[field] = i >= 0 ? row[i] : null;
-  }
-  return out;
-}
-
-function buildDynamicObject(headers, row) {
-  const obj = {};
-  for (let i = 0; i < headers.length; i++) {
-    const key = slugHeader(headers[i], "col_" + (i + 1));
-    if (!(key in obj)) obj[key] = row[i] ?? "";
-    else obj[key + "_" + (i + 1)] = row[i] ?? "";
-  }
-  return obj;
-}
-
-function parseHistoricoWide(fileName, sheetName, matrix, meta) {
-  const headers = meta.headers;
-  const idx = buildHeaderIndex(headers);
-  const out = [];
-  const cedulaIdx = pickIndex(idx, ["cedula"]);
-  const docenteIdx = pickIndex(idx, ["docente"]);
-  const escuelaIdx = pickIndex(idx, ["escuela"]);
-
-  const periodGroups = [];
-  for (let i = 0; i < headers.length; i++) {
-    const h = headers[i];
-    if (norm(h).includes("promedio de nota") || norm(h).includes("evaluadores") || norm(h).includes("percentil")) {
-      const parts = h.split("|").map(cleanText);
-      if (parts.length >= 2) {
-        periodGroups.push({ col: i, periodo: cleanText(parts[0]), metrica: cleanText(parts[1]) });
-      }
+      if (!valores.length) return 0;
+      const suma = valores.reduce((acc, val) => acc + val, 0);
+      return suma / valores.length;
     }
-  }
 
-  for (let r = meta.dataStart; r < matrix.length; r++) {
-    const row = matrix[r] || [];
-    if (!row.some(v => cleanText(v) !== "")) continue;
+    function limpiarInforme() {
+      setText(outDocente, "");
+      setText(outCarrera, "");
+      setText(outCarrera2, "");
+      setText(outCarrera3, "");
+      setText(outCoordinador, "");
+      setText(outAsignatura, "");
+      setText(outP1, "");
+      setText(outP2, "");
+      setText(outP3, "");
+      setText(outP4, "");
+      setText(outP5, "");
+      setText(outP6, "");
+      setText(outP7, "");
+      setText(outP8, "");
+      setText(outPromedio, "");
+      setText(outPromedioTodas, "");
+      setText(outPromedio100, "");
+    }
 
-    const dyn = buildDynamicObject(headers, row);
-    const base = {
-      _archivo: fileName,
-      _hoja: sheetName,
-      _fila_excel: r + 1,
-      _tipo_registro: "historico",
-      _header_row: meta.headerRow + 1,
-      _header_strategy: meta.strategy,
-      carrera: cleanText(row[escuelaIdx]),
-      docente: cleanText(row[docenteIdx]),
-      cedula: looksLikeCedula(row[cedulaIdx]),
-      materia: "",
-      paralelo: "",
-      codigo_curso: "",
-      codigo_evaluacion: "",
-      pregunta: "",
-      pregunta_texto: "",
-      fecha: "",
-      hora: "",
-      ...dyn
-    };
-
-    if (periodGroups.length) {
-      const uniquePeriods = [...new Set(periodGroups.map(g => g.periodo).filter(Boolean))];
-      uniquePeriods.forEach(periodo => {
-        const rec = {
-          ...base,
-          periodo,
-          valor_numerico: null,
-          valor_texto: "",
-          evaluadores: null,
-          participacion_pct: null,
-          percentil: null
-        };
-        periodGroups.filter(g => g.periodo === periodo).forEach(g => {
-          const value = row[g.col];
-          const m = norm(g.metrica);
-          if (m.includes("promedio")) {
-            rec.valor_numerico = cleanNumber(value);
-            rec.valor_texto = cleanText(value);
-          } else if (m.includes("evaluadores")) {
-            rec.evaluadores = cleanNumber(value);
-          } else if (m.includes("percentil")) {
-            rec.percentil = cleanNumber(value);
-          }
-        });
-        rec._raw_row_json = JSON.stringify(row);
-        out.push(rec);
+    function cargarDocentes() {
+      const docentes = uniqueValues(datos, "docente");
+      docentes.forEach(docente => {
+        const option = document.createElement("option");
+        option.value = docente;
+        option.textContent = docente;
+        docenteSelect.appendChild(option);
       });
-    } else {
-      const rec = {
-        ...base,
-        periodo: "",
-        valor_numerico: null,
-        valor_texto: "",
-        evaluadores: null,
-        participacion_pct: null,
-        percentil: null,
-        _raw_row_json: JSON.stringify(row)
-      };
-      out.push(rec);
     }
-  }
-  return out;
-}
 
-function parseGenericSheet(fileName, sheetName, matrix, meta) {
-  const headers = meta.headers;
-  const hidx = buildHeaderIndex(headers);
-  const tipo = detectTipoRegistro(fileName, sheetName);
-  const out = [];
+    function cargarCarreras(docente) {
+      clearOptions(carreraSelect, "Seleccione una carrera");
+      clearOptions(cursoSelect, "Seleccione un curso");
+      cursoSelect.disabled = true;
 
-  for (let r = meta.dataStart; r < matrix.length; r++) {
-    const row = matrix[r] || [];
-    if (!row.some(v => cleanText(v) !== "")) continue;
+      if (!docente) {
+        carreraSelect.disabled = true;
+        return;
+      }
 
-    const dyn = buildDynamicObject(headers, row);
-    const canon = extractCanonical(row, hidx);
+      const filtrados = datos.filter(item => item.docente === docente);
+      const carreras = uniqueValues(filtrados, "carrera");
 
-    const rec = {
-      _archivo: fileName,
-      _hoja: sheetName,
-      _fila_excel: r + 1,
-      _tipo_registro: tipo,
-      _header_row: meta.headerRow + 1,
-      _header_strategy: meta.strategy,
-      carrera: cleanText(canon.carrera),
-      docente: cleanText(canon.docente),
-      cedula: looksLikeCedula(canon.cedula),
-      materia: cleanText(canon.materia),
-      paralelo: cleanText(canon.paralelo),
-      codigo_curso: cleanText(canon.codigo_curso),
-      codigo_evaluacion: cleanText(canon.codigo_evaluacion),
-      periodo: cleanText(canon.periodo),
-      pregunta: cleanText(canon.pregunta),
-      pregunta_texto: cleanText(canon.pregunta_texto),
-      valor_numerico: cleanNumber(canon.valor_numerico),
-      valor_texto: cleanText(canon.valor_texto),
-      evaluadores: cleanNumber(canon.evaluadores),
-      participacion_pct: cleanNumber(canon.participacion_pct),
-      percentil: cleanNumber(canon.percentil),
-      fecha: cleanText(canon.fecha),
-      hora: cleanText(canon.hora),
-      ...dyn,
-      _raw_row_json: JSON.stringify(row)
-    };
+      carreras.forEach(carrera => {
+        const option = document.createElement("option");
+        option.value = carrera;
+        option.textContent = carrera;
+        carreraSelect.appendChild(option);
+      });
 
-    if (!rec.valor_texto && rec.valor_numerico !== null) rec.valor_texto = String(rec.valor_numerico);
-
-    const hasAnyUseful = Object.values(rec).some(v => v !== "" && v !== null);
-    if (hasAnyUseful) out.push(rec);
-  }
-  return out;
-}
-
-function parseSheet(fileName, sheetName, sheet) {
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
-  if (!matrix.length) return [];
-  const meta = flattenHeaders(fileName, sheetName, matrix);
-  if (norm(fileName).includes("historico")) {
-    return parseHistoricoWide(fileName, sheetName, matrix, meta);
-  }
-  return parseGenericSheet(fileName, sheetName, matrix, meta);
-}
-
-function setOptions(id, values, allLabel) {
-  const el = document.getElementById(id);
-  el.innerHTML = "";
-  const all = document.createElement("option");
-  all.value = "";
-  all.textContent = allLabel;
-  el.appendChild(all);
-  [...new Set(values.filter(Boolean).map(v => String(v)))].sort((a,b)=>a.localeCompare(b, "es")).forEach(v => {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    el.appendChild(o);
-  });
-}
-
-function buildAllColumns(rows) {
-  const set = new Set(BASE_FIELDS);
-  rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
-  const dynamic = [...set].filter(c => !BASE_FIELDS.includes(c)).sort((a,b)=>a.localeCompare(b,"es"));
-  return [...BASE_FIELDS, ...dynamic];
-}
-
-function loadFilterOptions() {
-  setOptions("f_archivo", baseGeneral.map(r => r._archivo), "Todos");
-  setOptions("f_hoja", baseGeneral.map(r => r._hoja), "Todas");
-  setOptions("f_carrera", baseGeneral.map(r => r.carrera), "Todas");
-  setOptions("f_docente", baseGeneral.map(r => r.docente), "Todos");
-  setOptions("f_materia", baseGeneral.map(r => r.materia), "Todas");
-  setOptions("f_pregunta", baseGeneral.map(r => r.pregunta_texto || r.pregunta), "Todas");
-  setOptions("f_tipo_registro", baseGeneral.map(r => r._tipo_registro), "Todos");
-  setOptions("f_columna_extra", allColumns.filter(c => !BASE_FIELDS.includes(c) && !c.startsWith("_")), "Ninguna");
-}
-
-function renderSummary() {
-  document.getElementById("resumen").innerHTML = `
-    <h2>Resumen</h2>
-    <div class="kpis">
-      <div class="kpi">Registros: <strong>${baseGeneral.length}</strong></div>
-      <div class="kpi">Archivos: <strong>${new Set(baseGeneral.map(x => x._archivo)).size}</strong></div>
-      <div class="kpi">Hojas: <strong>${new Set(baseGeneral.map(x => x._hoja)).size}</strong></div>
-      <div class="kpi">Columnas totales: <strong>${allColumns.length}</strong></div>
-      <div class="kpi">Docentes: <strong>${new Set(baseGeneral.map(x => x.docente).filter(Boolean)).size}</strong></div>
-      <div class="kpi">Materias: <strong>${new Set(baseGeneral.map(x => x.materia).filter(Boolean)).size}</strong></div>
-    </div>
-    <div class="muted">Cada fila mantiene todas las columnas originales detectadas en la hoja. Además conserva <code>_raw_row_json</code> para verificar que nada se haya perdido.</div>
-  `;
-}
-
-function renderTable() {
-  const stats = document.getElementById("stats");
-  const columnasInfo = document.getElementById("columnasInfo");
-  stats.innerHTML = `
-    <div class="kpi">Resultados: <strong>${baseFiltrada.length}</strong></div>
-    <div class="kpi">Carreras: <strong>${new Set(baseFiltrada.map(x => x.carrera).filter(Boolean)).size}</strong></div>
-    <div class="kpi">Docentes: <strong>${new Set(baseFiltrada.map(x => x.docente).filter(Boolean)).size}</strong></div>
-    <div class="kpi">Materias: <strong>${new Set(baseFiltrada.map(x => x.materia).filter(Boolean)).size}</strong></div>
-  `;
-  columnasInfo.textContent = "Columnas activas en la exportación: " + allColumns.length;
-
-  const thead = document.querySelector("#tabla thead");
-  const tbody = document.querySelector("#tabla tbody");
-  thead.innerHTML = "<tr>" + allColumns.map(c => "<th>" + esc(c) + "</th>").join("") + "</tr>";
-  tbody.innerHTML = "";
-
-  baseFiltrada.slice(0, 1000).forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = allColumns.map(c => "<td>" + esc(r[c] ?? "") + "</td>").join("");
-    tbody.appendChild(tr);
-  });
-}
-
-function applyContains(v, f) {
-  if (!f) return true;
-  return norm(v).includes(norm(f));
-}
-
-function aplicarFiltros() {
-  const extraCol = document.getElementById("f_columna_extra").value;
-  const extraVal = document.getElementById("f_valor_extra").value;
-
-  baseFiltrada = baseGeneral.filter(r =>
-    applyContains(r._archivo, document.getElementById("f_archivo").value) &&
-    applyContains(r._hoja, document.getElementById("f_hoja").value) &&
-    applyContains(r.carrera, document.getElementById("f_carrera").value) &&
-    applyContains(r.docente, document.getElementById("f_docente").value) &&
-    applyContains(r.cedula, document.getElementById("f_cedula").value) &&
-    applyContains(r.materia, document.getElementById("f_materia").value) &&
-    applyContains(r._tipo_registro, document.getElementById("f_tipo_registro").value) &&
-    applyContains(r.pregunta_texto || r.pregunta, document.getElementById("f_pregunta").value) &&
-    applyContains(r.periodo, document.getElementById("f_periodo").value) &&
-    (!document.getElementById("f_texto").value || norm(JSON.stringify(r)).includes(norm(document.getElementById("f_texto").value))) &&
-    (!extraCol || applyContains(r[extraCol], extraVal))
-  );
-  renderTable();
-}
-
-function limpiarFiltros() {
-  ["f_archivo","f_hoja","f_carrera","f_docente","f_cedula","f_materia","f_pregunta","f_tipo_registro","f_periodo","f_columna_extra","f_valor_extra","f_texto"]
-    .forEach(id => document.getElementById(id).value = "");
-  baseFiltrada = baseGeneral.slice();
-  renderTable();
-}
-
-async function procesar() {
-  const status = document.getElementById("status");
-  const files = Array.from(document.getElementById("files").files || []);
-  status.innerHTML = "";
-
-  if (files.length !== 3) {
-    status.innerHTML = '<div class="err">Debe cargar exactamente los tres archivos.</div>';
-    return;
-  }
-
-  const check = validateFiles(files);
-  if (check.missing.length || check.invalid.length) {
-    status.innerHTML = '<div class="err">Los archivos no coinciden exactamente con los requeridos.</div>';
-    return;
-  }
-
-  status.innerHTML = '<div class="ok">Compilando base íntegra...</div>';
-  baseGeneral = [];
-
-  for (const req of REQUIRED) {
-    const file = files.find(f => norm(f.name) === norm(req));
-    const wb = await readWorkbook(file);
-    for (const sheetName of wb.SheetNames) {
-      const rows = parseSheet(file.name, sheetName, wb.Sheets[sheetName]);
-      baseGeneral.push(...rows);
+      carreraSelect.disabled = false;
     }
-  }
 
-  allColumns = buildAllColumns(baseGeneral);
-  baseFiltrada = baseGeneral.slice();
+    function cargarCursos(docente, carrera) {
+      clearOptions(cursoSelect, "Seleccione un curso");
 
-  loadFilterOptions();
-  renderSummary();
-  renderTable();
+      if (!docente || !carrera) {
+        cursoSelect.disabled = true;
+        return;
+      }
 
-  document.getElementById("resumen").classList.remove("hidden");
-  document.getElementById("filtros").classList.remove("hidden");
-  document.getElementById("vista").classList.remove("hidden");
+      const filtrados = datos.filter(item => item.docente === docente && item.carrera === carrera);
+      const cursos = uniqueValues(filtrados, "curso");
 
-  status.innerHTML = '<div class="ok">Base compilada correctamente. Esta versión conserva columnas originales y fila cruda.</div>';
-}
+      cursos.forEach(curso => {
+        const option = document.createElement("option");
+        option.value = curso;
+        option.textContent = curso;
+        cursoSelect.appendChild(option);
+      });
 
-function csvEscape(v) {
-  const s = String(v ?? "").replace(/"/g, '""');
-  return '"' + s + '"';
-}
+      cursoSelect.disabled = false;
+    }
 
-function exportarCSV() {
-  if (!baseGeneral.length) return;
-  const lines = [];
-  lines.push(allColumns.map(csvEscape).join(","));
-  baseGeneral.forEach(r => {
-    lines.push(allColumns.map(c => csvEscape(r[c] ?? "")).join(","));
-  });
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "base_general_integra_v3.csv";
-  a.click();
-}
+    function llenarInforme(docente, carrera, curso) {
+      if (!docente || !carrera || !curso) {
+        limpiarInforme();
+        return;
+      }
 
-function exportarJSON() {
-  if (!baseGeneral.length) return;
-  const blob = new Blob([JSON.stringify({
-    columnas: allColumns,
-    registros: baseGeneral
-  }, null, 2)], { type: "application/json;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "base_general_integra_v3.json";
-  a.click();
-}
-</script>
+      const registro = datos.find(item =>
+        item.docente === docente &&
+        item.carrera === carrera &&
+        item.curso === curso
+      );
+
+      if (!registro) {
+        limpiarInforme();
+        return;
+      }
+
+      const cursosMismaCarrera = datos.filter(item =>
+        item.docente === docente && item.carrera === carrera
+      );
+
+      const promedios = cursosMismaCarrera.map(calcularPromedioFila);
+      const promedioTodas = promedios.length
+        ? promedios.reduce((acc, val) => acc + val, 0) / promedios.length
+        : 0;
+
+      const promedioFila = calcularPromedioFila(registro);
+      const promedioSobre100 = promedioTodas * 20;
+
+      setText(outDocente, registro.docente);
+      setText(outCarrera, registro.carrera);
+      setText(outCarrera2, registro.carrera);
+      setText(outCarrera3, registro.carrera);
+      setText(outCoordinador, registro.coordinador || "Mgtr. ...");
+
+      setText(outAsignatura, registro.curso);
+      setText(outP1, formatNumber(registro.p1));
+      setText(outP2, formatNumber(registro.p2));
+      setText(outP3, formatNumber(registro.p3));
+      setText(outP4, formatNumber(registro.p4));
+      setText(outP5, formatNumber(registro.p5));
+      setText(outP6, formatNumber(registro.p6));
+      setText(outP7, formatNumber(registro.p7));
+      setText(outP8, formatNumber(registro.p8));
+      setText(outPromedio, formatNumber(promedioFila));
+      setText(outPromedioTodas, formatNumber(promedioTodas));
+      setText(outPromedio100, formatNumber(promedioSobre100));
+    }
+
+    docenteSelect.addEventListener("change", function () {
+      const docente = this.value;
+
+      clearOptions(carreraSelect, "Seleccione una carrera");
+      clearOptions(cursoSelect, "Seleccione un curso");
+      carreraSelect.disabled = true;
+      cursoSelect.disabled = true;
+      limpiarInforme();
+
+      cargarCarreras(docente);
+    });
+
+    carreraSelect.addEventListener("change", function () {
+      const docente = docenteSelect.value;
+      const carrera = this.value;
+
+      clearOptions(cursoSelect, "Seleccione un curso");
+      cursoSelect.disabled = true;
+      limpiarInforme();
+
+      if (docente && carrera) {
+        setText(outDocente, docente);
+        setText(outCarrera, carrera);
+        setText(outCarrera2, carrera);
+        setText(outCarrera3, carrera);
+
+        const registroBase = datos.find(item => item.docente === docente && item.carrera === carrera);
+        setText(outCoordinador, registroBase?.coordinador || "Mgtr. ...");
+      }
+
+      cargarCursos(docente, carrera);
+    });
+
+    cursoSelect.addEventListener("change", function () {
+      const docente = docenteSelect.value;
+      const carrera = carreraSelect.value;
+      const curso = this.value;
+
+      llenarInforme(docente, carrera, curso);
+    });
+
+    btnLimpiar.addEventListener("click", function () {
+      docenteSelect.value = "";
+      clearOptions(carreraSelect, "Seleccione una carrera");
+      clearOptions(cursoSelect, "Seleccione un curso");
+      carreraSelect.disabled = true;
+      cursoSelect.disabled = true;
+      limpiarInforme();
+    });
+
+    cargarDocentes();
+    limpiarInforme();
+  </script>
 </body>
 </html>
